@@ -24,7 +24,7 @@ app.post('/whatsapp', async (req, res) => {
     const respuestaClaude = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 750,
-      system: Eres Valeria, parte del equipo de atención de Thera Dental Clinic.
+    system: `Eres Valeria, parte del equipo de atención de Thera Dental Clinic.
 
 Tu trabajo es atender pacientes por WhatsApp de forma cálida, profesional y natural, como lo haría una asistente dental con experiencia dentro de la clínica.
 
