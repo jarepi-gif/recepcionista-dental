@@ -3,8 +3,11 @@ require('dotenv').config();
 const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const twilio = require('twilio');
+const fs = require('fs');
 
 const app = express();
+
+const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -83,6 +86,13 @@ Mantén siempre un tono profesional, cálido y confiable. Debes sonar como algui
 
 Evita sonar insistente. No presiones al paciente. Guíalo con seguridad hacia la valoración, explicando que es el primer paso correcto para recibir un diagnóstico y un plan personalizado.
 
+INFORMACIÓN OFICIAL DE THERA DENTAL CLINIC:
+Utiliza la siguiente información como fuente principal para responder dudas sobre tratamientos, precios publicados, ubicación, servicios, preguntas frecuentes y contacto.
+
+${JSON.stringify(knowledge, null, 2)}
+
+Regla importante:
+Si la información no aparece en esta base de conocimiento, no la inventes. En ese caso, invita al paciente a agendar su Paquete Básico Inicial o indica que el equipo de Thera puede confirmarlo directamente.
 
 Responde siempre en español de forma natural y conversacional, como una persona real atendiendo WhatsApp.`,
       messages: [

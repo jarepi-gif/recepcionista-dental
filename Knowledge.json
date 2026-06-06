@@ -1,0 +1,321 @@
+{
+"clinica": {
+"nombre": "Thera Dental Clinic",
+"descripcion_general": "Clínica premium de estética dental, diseño de sonrisa digital y rehabilitación con implantes monofásicos orales.",
+"propuesta_valor": [
+"Diseño de sonrisa digital personalizado.",
+"Tecnología computarizada.",
+"Atención premium.",
+"Diagnóstico digital de última generación.",
+"Trato humano personalizado.",
+"Resultados naturales, sofisticados y predecibles."
+],
+"filosofia": "En Thera Dental Clinic se combinan prácticas de excelencia clínica y sensibilidad estética para crear sonrisas naturales y sofisticadas.",
+"prioridad": "La principal prioridad y compromiso son la seguridad y calidad en el tratamiento, optimizando los tiempos, el proceso, el éxito del tratamiento y la experiencia del paciente.",
+"telefono": "+52 557 911 3424",
+"telefono_sin_formato": "5579113424",
+"email": "[info@theradentalclinic.com](mailto:info@theradentalclinic.com)",
+"direccion": {
+"lugar": "PLAZA CENTRAL INTERLOMAS",
+"local": "Local PB 11",
+"calle": "Blvd. Palmas Hills 1",
+"colonia": "Villa de las Palmas",
+"codigo_postal": "52787",
+"municipio": "Naucalpan de Juárez",
+"estado": "Estado de México",
+"direccion_completa": "PLAZA CENTRAL INTERLOMAS, Local PB 11, Blvd. Palmas Hills 1, Villa de las Palmas, C. P. 52787, Naucalpan de Juárez, Estado de México"
+},
+"sitio_web": "https://theradentalclinic.com/",
+"redes_sociales": {
+"facebook": "Disponible en el sitio web oficial.",
+"instagram": "Disponible en el sitio web oficial."
+},
+"horario": {
+"nota": "El sitio menciona sección de horario, pero no muestra horas específicas. Si el paciente pregunta por horarios, solicitar autorización para consultar disponibilidad o invitar a agendar."
+}
+},
+"doctor_principal": {
+"nombre": "Dr. Jaime Augusto Reyes Pinzón",
+"especialidad": "Especialista en rehabilitación implantológica y cosmética oral",
+"descripcion": "Clínica y estética dental de alto nivel.",
+"formacion": "Universidad Nacional Autónoma de México",
+"experiencia": "27 años de experiencia",
+"enfoque": [
+"Planificación digital.",
+"Excelencia técnica.",
+"Trato personalizado.",
+"Resultados naturales y duraderos."
+]
+},
+"servicios": {
+"diseno_sonrisa_digital": {
+"nombre": "Diseño de sonrisa digital",
+"descripcion": "Planificación estética personalizada con simulaciones digitales y mock-ups realistas.",
+"objetivo": "Transformar la sonrisa con precisión, estética y confort.",
+"palabras_clave": [
+"diseño de sonrisa",
+"sonrisa digital",
+"mock-up",
+"simulación digital",
+"estética dental"
+]
+},
+"carillas": {
+"nombre": "Carillas de zirconia, grapheno biopolímero nano reforzado con grafito y composite premium",
+"descripcion": "Restauraciones de alta estética, resistencia y acabado natural.",
+"materiales_mencionados": [
+"Zirconia",
+"Grapheno biopolímero nano reforzado con grafito",
+"Composite premium"
+],
+"palabras_clave": [
+"carillas",
+"carillas dentales",
+"zirconia",
+"grafeno",
+"grapheno",
+"composite",
+"diseño de sonrisa"
+]
+},
+"blanqueamiento": {
+"nombre": "Blanqueamiento profesional avanzado",
+"descripcion": "Protocolos clínicos seguros y mantenimiento personalizado.",
+"palabras_clave": [
+"blanqueamiento",
+"blanqueamiento dental",
+"dientes blancos"
+]
+},
+"implantes": {
+"nombre": "Implantes dentales monofásicos y prótesis sobre implantes monofásicos de última generación",
+"descripcion": "Restauración funcional y estética duradera.",
+"palabras_clave": [
+"implantes",
+"implante dental",
+"implantes monofásicos",
+"prótesis sobre implantes",
+"diente ausente"
+]
+},
+"rehabilitacion_estetica": {
+"nombre": "Rehabilitación estética completa",
+"descripcion": "Coronas y puentes con soluciones integradas, materiales y técnicas de última generación CAD CAM premium.",
+"incluye": [
+"Coronas",
+"Puentes",
+"Técnicas CAD CAM premium"
+],
+"palabras_clave": [
+"rehabilitación",
+"coronas",
+"puentes",
+"CAD CAM"
+]
+},
+"fotografia_dental": {
+"nombre": "Fotografía dental profesional y guías de sonrisa",
+"descripcion": "Documentación clínica y control estético en cada fase.",
+"palabras_clave": [
+"fotografía dental",
+"guías de sonrisa",
+"análisis estético"
+]
+}
+},
+"precios_publicados": {
+"nota_para_valeria": "Estos precios aparecen en el sitio web. Aun así, si el paciente pregunta por precio, responder con cuidado y sugerir valoración para confirmar el plan correcto según su caso.",
+"diseno_sonrisa_digital_con_grafeno": {
+"nombre": "Diseño de sonrisa digital con Grafeno nano reforzado con grafito",
+"precio_mxn": 25000,
+"precio_texto": "$25,000.00 MXN",
+"incluye": [
+"Limpieza dental (eliminación de sarro y placa)",
+"10 carillas",
+"Guarda protectora"
+]
+},
+"diseno_sonrisa_digital_resina_impresion_3d": {
+"nombre": "Diseño de sonrisa digital en resina impresión 3D",
+"precio_mxn": 35000,
+"precio_texto": "$35,000.00 MXN",
+"incluye": [
+"Limpieza dental (eliminación de sarro y placa)",
+"10 carillas",
+"Guarda protectora"
+]
+},
+"diseno_sonrisa_digital_zirconio": {
+"nombre": "Diseño de sonrisa digital en zirconio",
+"precio_mxn": 55000,
+"precio_texto": "$55,000.00 MXN",
+"incluye": [
+"Limpieza dental (eliminación de sarro y placa)",
+"10 carillas",
+"Guarda protectora"
+]
+},
+"rehabilitacion_implante_un_diente": {
+"nombre": "Plan rehabilitación con implante un diente ausente",
+"precio_mxn": 36000,
+"precio_texto": "$36,000.00 MXN",
+"incluye": [
+"Valoración implantológica",
+"Un implante monofásico",
+"Una corona de grapheno o zirconio"
+]
+},
+"rehabilitacion_implantes_tres_a_cuatro_dientes": {
+"nombre": "Plan rehabilitación con implantes tres a cuatro dientes ausentes",
+"precio_mxn": 78000,
+"precio_texto": "$78,000.00 MXN",
+"incluye": [
+"Valoración implantológica",
+"Tres a cuatro implantes monofásicos",
+"Tres a cuatro coronas de grapheno o zirconio"
+]
+},
+"rehabilitacion_implantes_maxilar": {
+"nombre": "Plan rehabilitación con implantes un maxilar superior o inferior ausente",
+"precio_mxn": 95000,
+"precio_texto": "$95,000.00 MXN",
+"incluye": [
+"Valoración implantológica",
+"Seis a ocho implantes monofásicos",
+"Diez a doce coronas de grapheno o zirconio"
+]
+}
+},
+"paquete_basico_inicial": {
+"fuente": "Información interna proporcionada por Thera Dental Clinic en la configuración del asistente.",
+"nombre": "Paquete Básico Inicial",
+"precio_mxn": 1500,
+"precio_texto": "$1,500 MXN",
+"regla_precio": "Dar el precio únicamente si el paciente pregunta por el costo del Paquete Básico Inicial.",
+"descripcion": "Cita de valoración profesional necesaria antes de recomendar un tratamiento específico.",
+"incluye": [
+"Valoración profesional.",
+"Limpieza dental (profilaxis).",
+"Aplicación de flúor.",
+"Fotografías intraorales y extraorales para el análisis del caso.",
+"Escáner digital 3D de la boca.",
+"Radiografía intraoral digital.",
+"Integración de historia clínica.",
+"Diagnóstico odontológico profesional.",
+"Plan de tratamiento personalizado de acuerdo con las necesidades del paciente."
+],
+"regla_de_uso": "Si todavía no se le explicó al paciente, mencionar de forma natural que el Paquete Básico Inicial es el primer paso para valorar su caso. Si ya se explicó durante la conversación, no repetir toda la lista salvo que el paciente lo pida, pregunte qué incluye, pregunte el costo o muestre confusión."
+},
+"preguntas_frecuentes": [
+{
+"pregunta": "¿Qué es una corona dental?",
+"respuesta": "Es una funda que se coloca sobre un diente dañado o un implante para protegerlo, devolverle su forma y permitir que funcione normalmente al masticar, mejorando también su apariencia."
+},
+{
+"pregunta": "¿Qué es el grafeno?",
+"respuesta": "El grafeno es un material avanzado, muy resistente, ligero y duradero, hecho a partir de biopolímeros nanorreforzados. Se utiliza en odontología por sus propiedades de resistencia, ligereza y estética."
+},
+{
+"pregunta": "¿Qué ventajas tienen las coronas con grafeno?",
+"respuesta": "Ofrecen alta resistencia al desgaste, mayor ligereza y comodidad, apariencia natural y buena biocompatibilidad con las encías."
+},
+{
+"pregunta": "¿Qué es una corona de zirconio?",
+"respuesta": "Es una corona hecha de dióxido de zirconio, un material cerámico muy resistente, estético y duradero, conocido por su apariencia natural."
+},
+{
+"pregunta": "¿Cuáles son las ventajas de las coronas de zirconio sobre implantes?",
+"respuesta": "Tienen estética muy natural, alta resistencia, buena biocompatibilidad, son libres de metal y pueden durar muchos años con el cuidado adecuado."
+},
+{
+"pregunta": "¿En qué casos se recomienda una corona sobre implante?",
+"respuesta": "Se recomienda cuando se ha perdido uno o varios dientes y se busca recuperar la función al masticar y la estética con una solución fija y duradera."
+},
+{
+"pregunta": "¿Las coronas sobre implantes se ven naturales?",
+"respuesta": "Sí. Están diseñadas para imitar el color, la forma y la translucidez de los dientes naturales, integrándose de manera estética a la sonrisa."
+},
+{
+"pregunta": "¿Cómo se cuida una corona sobre implante?",
+"respuesta": "Se recomienda cepillar los dientes al menos tres veces al día, usar irrigadores bucales si es posible, acudir a revisiones periódicas y evitar morder objetos muy duros."
+},
+{
+"pregunta": "¿El procedimiento duele?",
+"respuesta": "El tratamiento se realiza con anestesia local, por lo que suele ser cómodo para el paciente. La valoración profesional permite explicar el proceso de acuerdo con cada caso."
+},
+{
+"pregunta": "¿Cuántas citas se necesitan?",
+"respuesta": "Generalmente se requieren dos citas: una para preparación del diente o colocación del implante y toma de impresiones, y otra para la colocación de la corona definitiva. El número real de citas puede variar según el caso."
+},
+{
+"pregunta": "¿Cómo saber si necesito una corona?",
+"respuesta": "La mejor forma es realizar una valoración dental profesional. En Thera Dental Clinic se evalúa el caso para ofrecer la opción más adecuada."
+},
+{
+"pregunta": "¿Ofrecen financiamiento?",
+"respuesta": "Sí. Thera Dental Clinic cuenta con opciones de financiamiento y planes a medida adaptados a tratamientos premium."
+}
+],
+"formulario_contacto": {
+"campos": [
+"Nombre",
+"Correo electrónico",
+"Teléfono",
+"Fecha",
+"Tratamiento de interés",
+"Comentarios"
+],
+"tratamientos_del_formulario": [
+"Diseño de sonrisa digital con Grafeno nano reforzado con grafito",
+"Diseño de sonrisa digital en resina impresión 3D",
+"Diseño de sonrisa digital en zirconio",
+"Plan rehabilitación con implante un diente ausente",
+"Plan rehabilitación con implantes tres a cuatro dientes ausentes",
+"Plan rehabilitación con implantes un maxilar superior o inferior ausente"
+]
+},
+"testimonios": [
+{
+"paciente": "M. G.",
+"texto": "Thera Dental Clinic superó mis expectativas: elegancia en el resultado y máxima profesionalidad."
+},
+{
+"paciente": "A. R.",
+"texto": "Atención exclusiva y tecnología de primer nivel. Vi mi sonrisa antes de comenzar el tratamiento."
+}
+],
+"reglas_para_responder": {
+"tono": [
+"Profesional",
+"Cálido",
+"Humano",
+"Claro",
+"Seguro",
+"No robótico"
+],
+"reglas_clave": [
+"No decir que es IA, chatbot, asistente virtual o sistema automatizado.",
+"Hablar como parte real del equipo de Thera Dental Clinic.",
+"No inventar diagnósticos, precios, resultados ni tiempos de tratamiento.",
+"Si el paciente pregunta por un tratamiento, orientar hacia valoración profesional.",
+"Si el paciente pregunta por costos publicados, responder con cuidado y aclarar que la valoración permite confirmar el plan correcto.",
+"Si no hay información suficiente, invitar a agendar el Paquete Básico Inicial.",
+"No repetir información que ya se explicó en la conversación.",
+"Responder con ortografía perfecta y mensajes completos."
+],
+"datos_para_agendar": [
+"Nombre completo",
+"Número telefónico",
+"Correo electrónico",
+"Día preferido",
+"Hora preferida",
+"Tratamiento de interés"
+]
+},
+"fuentes": {
+"sitio_principal": "https://theradentalclinic.com/",
+"servicios": "https://theradentalclinic.com/servicios/",
+"preguntas_frecuentes": "https://theradentalclinic.com/preguntas/",
+"contacto": "https://theradentalclinic.com/contacto/"
+}
+}
