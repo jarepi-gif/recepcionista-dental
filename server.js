@@ -37,12 +37,14 @@ historialConversaciones[numero] = appendMessage(
 
 // El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
 try {
+  const intakeToken = mensaje.match(/\[XIM:([0-9a-f-]{36})\]/i)?.[1];
   await syncInboundLead({
     eventId: req.body.MessageSid,
     conversationId: numero,
     phone: numero,
     displayName: req.body.ProfileName || undefined,
-    text: mensaje,
+    text: mensaje.replace(/\s*\[XIM:[0-9a-f-]{36}\]\s*/i, ' ').trim(),
+    intakeToken,
     receivedAt: new Date().toISOString()
   });
 } catch (syncError) {
