@@ -5,6 +5,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const twilio = require('twilio');
 const fs = require('fs');
 const { appendMessage } = require('./conversation-history');
+const { addTreatmentToTransferLink } = require('./transfer-link');
 
 const app = express();
 const historialConversaciones = {};
@@ -151,7 +152,10 @@ Responde siempre en español de forma natural y conversacional, como una persona
       messages: historialConversaciones[numero]
     });
 
-    const texto = respuestaClaude.content[0].text;
+    const texto = addTreatmentToTransferLink(
+      respuestaClaude.content[0].text,
+      historialConversaciones[numero]
+    );
 
     historialConversaciones[numero] = appendMessage(
       historialConversaciones[numero],
