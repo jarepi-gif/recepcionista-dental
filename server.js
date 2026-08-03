@@ -4,6 +4,7 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const twilio = require('twilio');
 const fs = require('fs');
+const { appendMessage } = require('./conversation-history');
 
 const app = express();
 const historialConversaciones = {};
@@ -26,14 +27,13 @@ if (!historialConversaciones[numero]) {
   historialConversaciones[numero] = [];
 }
 
-historialConversaciones[numero].push({
-  role: 'user',
-  content: mensaje
-});
+historialConversaciones[numero] = appendMessage(
+  historialConversaciones[numero],
+  'user',
+  mensaje
+);
 
-// Mantener solo los últimos 7 mensajes para no gastar demasiado
-historialConversaciones[numero] = historialConversaciones[numero].slice(-7);
-
+// El historial se limita por turnos para conservar contexto sin elevar el consumo.
     console.log('Mensaje recibido:', mensaje);
     console.log('De:', numero);
 
@@ -148,15 +148,16 @@ Regla importante:
 Si la información no aparece en esta base de conocimiento, no la inventes. En ese caso, invita al paciente a agendar su Paquete Básico Inicial o indica que el equipo de Thera puede confirmarlo directamente.
 
 Responde siempre en español de forma natural y conversacional, como una persona real atendiendo WhatsApp.`,
-      messages: [
-        {
-          role: 'user',
-          content: mensaje || ''
-        }
-      ]
+      messages: historialConversaciones[numero]
     });
 
     const texto = respuestaClaude.content[0].text;
+
+    historialConversaciones[numero] = appendMessage(
+      historialConversaciones[numero],
+      'assistant',
+      texto
+    );
 
     const twiml = new twilio.twiml.MessagingResponse();
     twiml.message(texto);
