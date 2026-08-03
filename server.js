@@ -6,6 +6,7 @@ const twilio = require('twilio');
 const fs = require('fs');
 const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
+const { syncInboundLead } = require('./ximgrowthos-sync');
 
 const app = express();
 const historialConversaciones = {};
@@ -33,6 +34,20 @@ historialConversaciones[numero] = appendMessage(
   'user',
   mensaje
 );
+
+// El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
+try {
+  await syncInboundLead({
+    eventId: req.body.MessageSid,
+    conversationId: numero,
+    phone: numero,
+    displayName: req.body.ProfileName || undefined,
+    text: mensaje,
+    receivedAt: new Date().toISOString()
+  });
+} catch (syncError) {
+  console.error('Error sincronizando con XimGrowthOS:', syncError.message);
+}
 
 // El historial se limita por turnos para conservar contexto sin elevar el consumo.
     console.log('Mensaje recibido:', mensaje);
