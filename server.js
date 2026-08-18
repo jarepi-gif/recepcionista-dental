@@ -7,6 +7,7 @@ const fs = require('fs');
 const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
 const { syncInboundLead } = require('./ximgrowthos-sync');
+const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 
 const app = express();
 const historialConversaciones = {};
@@ -36,9 +37,10 @@ historialConversaciones[numero] = appendMessage(
 );
 
 // El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
+let crmState = { patientState: 'UNKNOWN', commercialSuppression: true, humanHandoffRequired: false };
 try {
   const intakeToken = mensaje.match(/\[XIM:([0-9a-f-]{36})\]/i)?.[1];
-  await syncInboundLead({
+  crmState = await syncInboundLead({
     eventId: req.body.MessageSid,
     conversationId: numero,
     phone: numero,
@@ -59,6 +61,8 @@ try {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 888,
     system: `Eres Aura, parte del equipo de atención de Thera Dental Clinic.
+
+${patientStateInstruction(crmState)}
 
 Tu trabajo es atender pacientes por WhatsApp de forma cálida, profesional y natural, como lo haría una asistente dental con experiencia dentro de la clínica.
 
@@ -169,10 +173,9 @@ Responde siempre en español de forma natural y conversacional, como una persona
       messages: historialConversaciones[numero]
     });
 
-    const texto = addTreatmentToTransferLink(
-      respuestaClaude.content[0].text,
-      historialConversaciones[numero]
-    );
+    const texto = isCommercialOutboundEligible(crmState)
+      ? addTreatmentToTransferLink(respuestaClaude.content[0].text, historialConversaciones[numero])
+      : respuestaClaude.content[0].text;
 
     historialConversaciones[numero] = appendMessage(
       historialConversaciones[numero],
