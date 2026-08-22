@@ -8,6 +8,7 @@ const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
 const { syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
+const { alertEventFor, sendCommercialAlert } = require('./commercial-alerts');
 
 const app = express();
 const historialConversaciones = {};
@@ -49,6 +50,15 @@ try {
     intakeToken,
     receivedAt: new Date().toISOString()
   });
+  const alertEvent = alertEventFor(crmState);
+  if (alertEvent && !crmState.duplicate) {
+    sendCommercialAlert({
+      event: alertEvent,
+      patient: req.body.ProfileName || 'Paciente de WhatsApp',
+      treatment: 'Por confirmar',
+      action: 'Abrir XimGrowthOS para continuar'
+    }).catch((alertError) => console.error('Error enviando alerta comercial:', alertError.message));
+  }
 } catch (syncError) {
   console.error('Error sincronizando con XimGrowthOS:', syncError.message);
 }
