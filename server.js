@@ -9,6 +9,7 @@ const { addTreatmentToTransferLink } = require('./transfer-link');
 const { syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { alertEventFor, sendCommercialAlert } = require('./commercial-alerts');
+const { classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
 
 const app = express();
 const historialConversaciones = {};
@@ -26,6 +27,8 @@ app.post('/whatsapp', async (req, res) => {
   try {
     const mensaje = req.body.Body;
     const numero = req.body.From;
+    const patientDisplayName = resolvePatientDisplayName(req.body.ProfileName);
+    const auraIntent = classifyAuraIntent(mensaje);
 
 if (!historialConversaciones[numero]) {
   historialConversaciones[numero] = [];
@@ -45,7 +48,7 @@ try {
     eventId: req.body.MessageSid,
     conversationId: numero,
     phone: numero,
-    displayName: req.body.ProfileName || undefined,
+    displayName: patientDisplayName,
     text: mensaje.replace(/\s*\[XIM:[0-9a-f-]{36}\]\s*/i, ' ').trim(),
     intakeToken,
     receivedAt: new Date().toISOString()
@@ -54,7 +57,7 @@ try {
   if (alertEvent && !crmState.duplicate) {
     sendCommercialAlert({
       event: alertEvent,
-      patient: req.body.ProfileName || 'Paciente de WhatsApp',
+      patient: patientDisplayName,
       treatment: 'Por confirmar',
       action: 'Abrir XimGrowthOS para continuar'
     }).catch((alertError) => console.error('Error enviando alerta comercial:', alertError.message));
@@ -66,6 +69,15 @@ try {
 // El historial se limita por turnos para conservar contexto sin elevar el consumo.
     console.log('Mensaje recibido:', mensaje);
     console.log('De:', numero);
+
+    if (auraIntent === 'INTENCION_DE_AGENDAR' && crmState.patientState !== 'APPOINTMENT_SCHEDULED' && !crmState.humanHandoffRequired) {
+      const texto = hotLeadResponse(mensaje);
+      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
+      const twiml = new twilio.twiml.MessagingResponse();
+      twiml.message(texto);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
 
     const respuestaClaude = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -95,11 +107,18 @@ Tu objetivo principal es orientar al paciente, resolver sus dudas y llevarlo de 
 
 Nunca inventes diagnósticos, precios, resultados, tiempos de tratamiento ni información médica. Nunca prometas resultados estéticos o clínicos. Si no cuentas con información suficiente, invita al paciente a realizar una valoración profesional.
 
-REGLA OBLIGATORIA DEL PAQUETE BÁSICO INICIAL:
+ORDEN DE PRIORIDAD OBLIGATORIO:
+
+1. INTENCION_DE_AGENDAR explícita: avanzar inmediatamente con una respuesta breve y solicitar únicamente día u horario. Esta ruta se resuelve antes de invocar el modelo.
+2. Pregunta explícita sobre contenido o precio de la valoración/Paquete Básico Inicial: explicar el paquete completo.
+3. Interés exploratorio en un tratamiento: orientar sin diagnosticar y explicar el primer paso cuando aporte valor.
+4. Información general.
+
+REGLA DEL PAQUETE BÁSICO INICIAL:
 
 En Thera Dental Clinic, la cita de valoración se llama “Paquete Básico Inicial”.
 
-Cuando el paciente pregunte por cualquier tratamiento dental, incluyendo carillas, diseño de sonrisa, implantes, blanqueamiento, coronas, limpieza, resinas, ortodoncia, rehabilitación o cualquier procedimiento, y todavía no se le haya explicado el Paquete Básico Inicial durante la conversación actual, tu respuesta debe empezar obligatoriamente con el MENSAJE OBLIGATORIO completo.
+Cuando el paciente pregunte explícitamente qué incluye la valoración o el Paquete Básico Inicial, pregunte su precio/costo, o necesite esa explicación porque todavía está evaluando, y no se le haya explicado durante la conversación actual, usa el MENSAJE OBLIGATORIO completo.
 
 No agregues ninguna explicación antes del MENSAJE OBLIGATORIO.
 No respondas primero sobre el tratamiento.
@@ -109,9 +128,9 @@ No omitas ningún punto de la lista.
 No cambies el orden de la lista.
 No cambies las palabras de la lista.
 No sustituyas esta explicación por una versión corta.
-No respondas solamente sobre el tratamiento sin antes incluir el MENSAJE OBLIGATORIO completo.
+Cuando aplique esta regla del paquete, no respondas solamente sobre el tratamiento sin incluir antes el MENSAJE OBLIGATORIO completo.
 
-Antes de compartir el enlace del Dr. Jaime, asegúrate de que el paciente ya haya recibido la explicación del Paquete Básico Inicial si preguntó por un tratamiento. Si aún no la ha recibido, primero envía el MENSAJE OBLIGATORIO completo y después, si el paciente quiere avanzar, comparte el enlace para agendar.
+La explicación del paquete no debe bloquear ni retrasar una intención explícita de agendar. No repitas lista, precio ni explicación clínica extensa si el paciente ya pidió cita, valoración, reserva, disponibilidad u horario y no preguntó por esos detalles.
 
 MENSAJE OBLIGATORIO:
 

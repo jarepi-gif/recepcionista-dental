@@ -1,0 +1,38 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { PATIENT_NAME_FALLBACK, classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = require('../aura-cro-policy');
+
+test('A: intención explícita recibe avance breve', () => {
+  const message = 'Quiero agendar una valoración.';
+  assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
+  const response = hotLeadResponse(message);
+  assert.equal(response, '¡Claro! Con gusto coordinamos tu valoración de Diseño de Sonrisa en THERA. ¿Qué día te gustaría acudir?');
+  assert.doesNotMatch(response, /\$1,500|incluye|escáner|radiografía/i);
+});
+
+test('B: contenido y precio conservan la regla completa del paquete', () => {
+  assert.equal(classifyAuraIntent('¿Qué incluye la valoración de $1,500?'), 'EXPLICACION_PAQUETE_BASICO');
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  for (const required of ['Valoración profesional.', 'Escáner digital 3D de la boca.', 'Plan de tratamiento personalizado', '$1,500 MXN.']) {
+    assert.match(server, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('C: pregunta exploratoria sigue la ruta informativa', () => {
+  assert.equal(classifyAuraIntent('Me interesan las carillas, ¿qué opciones tienen?'), 'INFORMACION_GENERAL');
+});
+
+test('D: agenda mañana tiene prioridad y pide sólo horario', () => {
+  const message = 'Quiero agendar mañana.';
+  assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
+  assert.equal(hotLeadResponse(message), '¡Claro! Con gusto coordinamos tu valoración de Diseño de Sonrisa en THERA. ¿Qué horario te acomoda mañana?');
+});
+
+test('E: displayName interno usa fallback seguro', () => {
+  assert.equal(resolvePatientDisplayName('Dr. Jaime Reyes'), PATIENT_NAME_FALLBACK);
+  assert.equal(resolvePatientDisplayName('THERA Dental Clinic'), PATIENT_NAME_FALLBACK);
+  assert.equal(resolvePatientDisplayName('Cuenta de prueba'), PATIENT_NAME_FALLBACK);
+  assert.equal(resolvePatientDisplayName('María López'), 'María López');
+});
