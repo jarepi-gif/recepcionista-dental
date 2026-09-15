@@ -6,7 +6,7 @@ const twilio = require('twilio');
 const fs = require('fs');
 const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
-const { syncInboundLead } = require('./ximgrowthos-sync');
+const { extractInboundAttribution, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { alertEventFor, sendCommercialAlert } = require('./commercial-alerts');
 const { classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
@@ -43,14 +43,14 @@ historialConversaciones[numero] = appendMessage(
 // El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
 let crmState = { patientState: 'UNKNOWN', commercialSuppression: true, humanHandoffRequired: false };
 try {
-  const intakeToken = mensaje.match(/\[XIM:([0-9a-f-]{36})\]/i)?.[1];
+  const attribution = extractInboundAttribution(mensaje);
   crmState = await syncInboundLead({
     eventId: req.body.MessageSid,
     conversationId: numero,
     phone: numero,
     displayName: patientDisplayName,
-    text: mensaje.replace(/\s*\[XIM:[0-9a-f-]{36}\]\s*/i, ' ').trim(),
-    intakeToken,
+    text: attribution.text,
+    intakeToken: attribution.intakeToken,
     receivedAt: new Date().toISOString()
   });
   const alertEvent = alertEventFor(crmState);

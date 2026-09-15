@@ -2,7 +2,35 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 
-const { syncInboundLead } = require('../ximgrowthos-sync');
+const { extractInboundAttribution, syncInboundLead } = require('../ximgrowthos-sync');
+
+
+test('extracts the current THERA reference from the WhatsApp message', () => {
+  assert.deepEqual(
+    extractInboundAttribution('Quiero agendar una valoración. Referencia THERA: 2371DB1A5B06'),
+    {
+      intakeToken: '2371DB1A5B06',
+      text: 'Quiero agendar una valoración.'
+    }
+  );
+});
+
+test('keeps compatibility with the legacy XIM UUID token', () => {
+  assert.deepEqual(
+    extractInboundAttribution('Hola [XIM:10000000-0000-4000-8000-000000000001]'),
+    {
+      intakeToken: '10000000-0000-4000-8000-000000000001',
+      text: 'Hola'
+    }
+  );
+});
+
+test('returns a clean message when no attribution token exists', () => {
+  assert.deepEqual(extractInboundAttribution('Quiero información'), {
+    intakeToken: null,
+    text: 'Quiero información'
+  });
+});
 
 test('signs and sends an inbound message to XimGrowthOS', async () => {
   const message = {
