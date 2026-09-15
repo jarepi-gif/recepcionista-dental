@@ -233,6 +233,16 @@ app.get('/', (req, res) => {
   res.send('Recepcionista Dental IA funcionando');
 });
 
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    attributionParser: 'thera-reference-v1',
+    ximgrowthosConfigured: Boolean(
+      process.env.XIMGROWTHOS_INBOUND_URL && process.env.AURA_WEBHOOK_SECRET
+    )
+  });
+});
+
 app.listen(3000, () => {
   console.log('Servidor corriendo en puerto 3000');
 });
