@@ -7,14 +7,15 @@ function extractInboundAttribution(message = '') {
   const originalText = String(message ?? '');
   const ximMatch = originalText.match(XIM_TOKEN_PATTERN);
   const theraMatch = originalText.match(THERA_REFERENCE_PATTERN);
-  const intakeToken = ximMatch?.[1] || theraMatch?.[1]?.toUpperCase() || null;
+  const intakeToken = ximMatch?.[1] || null;
+  const intakeReference = theraMatch?.[1]?.toUpperCase() || null;
   const cleanText = originalText
     .replace(XIM_TOKEN_PATTERN, ' ')
     .replace(THERA_REFERENCE_PATTERN, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  return { intakeToken, text: cleanText };
+  return { intakeToken, intakeReference, text: cleanText };
 }
 
 async function syncInboundLead(message, options = {}) {

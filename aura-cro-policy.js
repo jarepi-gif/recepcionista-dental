@@ -24,7 +24,7 @@ const PATIENT_NAME_FALLBACK = 'Contacto de WhatsApp — nombre por confirmar';
 
 function normalize(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    .replace(/[^a-z0-9\s.,?¿!¡$]/g, ' ').replace(/\s+/g, ' ').trim();
+    .replace(/[^a-z0-9\s.,:?¿!¡$]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function classifyAuraIntent(message) {
@@ -35,10 +35,23 @@ function classifyAuraIntent(message) {
 }
 
 function hotLeadResponse(message) {
-  if (/\bmanana\b/.test(normalize(message))) {
-    return '¡Claro! Con gusto coordinamos tu valoración de Diseño de Sonrisa en THERA. ¿Qué horario te acomoda mañana?';
+  const text = normalize(message);
+  const day = text.match(/\b(hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/)?.[1];
+  const time = text.match(/\b(?:a\s+las?\s+)?(\d{1,2}(?::\d{2})?)\s*(a\s*\.?\s*m\s*\.?|p\s*\.?\s*m\s*\.?)?/);
+  const transferUrl = 'https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.';
+
+  if (day && time) {
+    const requestedDay = day === 'manana' ? 'mañana' : day === 'miercoles' ? 'miércoles' : day === 'sabado' ? 'sábado' : day;
+    const period = time[2] ? (/^p/.test(time[2]) ? 'p. m.' : 'a. m.') : '';
+    const requestedTime = `${time[1]}${period ? ` ${period}` : ''}`;
+    return `Gracias. Registré tu preferencia para el ${requestedDay} a las ${requestedTime}. Para confirmar disponibilidad con el Dr. Jaime Reyes, escríbele aquí: ${transferUrl}`;
   }
-  return '¡Claro! Con gusto coordinamos tu valoración de Diseño de Sonrisa en THERA. ¿Qué día te gustaría acudir?';
+  if (day) {
+    const requestedDay = day === 'manana' ? 'mañana' : day === 'miercoles' ? 'miércoles' : day === 'sabado' ? 'sábado' : day;
+    const dayPhrase = requestedDay === 'mañana' ? 'mañana' : `el ${requestedDay}`;
+    return `Gracias. ¿Qué horario prefieres ${dayPhrase}? Para confirmar disponibilidad con el Dr. Jaime Reyes también puedes escribirle aquí: ${transferUrl}`;
+  }
+  return `¡Claro! ¿Qué día y horario prefieres para tu valoración de Diseño de Sonrisa? Para confirmar disponibilidad con el Dr. Jaime Reyes también puedes escribirle aquí: ${transferUrl}`;
 }
 
 function resolvePatientDisplayName(displayName) {

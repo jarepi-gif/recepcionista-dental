@@ -51,6 +51,7 @@ try {
     displayName: patientDisplayName,
     text: attribution.text,
     intakeToken: attribution.intakeToken,
+    intakeReference: attribution.intakeReference,
     receivedAt: new Date().toISOString()
   });
   const alertEvent = alertEventFor(crmState);
@@ -222,7 +223,7 @@ Responde siempre en español de forma natural y conversacional, como una persona
     console.error('Error con Claude:', error.message);
 
     const twiml = new twilio.twiml.MessagingResponse();
-    twiml.message('Hola, soy Valeria de Thera Dental Clinic. En un momento te apoyamos 🦷');
+    twiml.message('Hola, soy Aura de Thera Dental Clinic. En un momento te apoyamos 🦷');
 
     res.type('text/xml');
     res.send(twiml.toString());
