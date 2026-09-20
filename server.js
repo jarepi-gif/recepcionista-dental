@@ -13,6 +13,7 @@ const { classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = requi
 
 const app = express();
 const historialConversaciones = {};
+const alertedMessageSids = new Set();
 
 const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 
@@ -55,13 +56,23 @@ try {
     receivedAt: new Date().toISOString()
   });
   const alertEvent = alertEventFor(crmState);
-  if (alertEvent && !crmState.duplicate) {
-    sendCommercialAlert({
-      event: alertEvent,
-      patient: patientDisplayName,
-      treatment: 'Por confirmar',
-      action: 'Abrir XimGrowthOS para continuar'
-    }).catch((alertError) => console.error('Error enviando alerta comercial:', alertError.message));
+  // XimGrowthOS can legitimately report a duplicate while recovering a
+  // previously persisted webhook. The commercial handoff must still be
+  // delivered unless this running Aura process already sent it for the same
+  // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
+  if (alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
+    try {
+      const alertMessage = await sendCommercialAlert({
+        event: alertEvent,
+        patient: patientDisplayName,
+        treatment: 'Por confirmar',
+        action: 'Abrir XimGrowthOS para continuar'
+      });
+      alertedMessageSids.add(req.body.MessageSid);
+      console.log('Alerta comercial aceptada por Twilio:', alertMessage.sid, alertMessage.status || 'accepted');
+    } catch (alertError) {
+      console.error('Error enviando alerta comercial:', alertError.message);
+    }
   }
 } catch (syncError) {
   console.error('Error sincronizando con XimGrowthOS:', syncError.message);
@@ -123,9 +134,7 @@ Cuando el paciente pregunte explícitamente qué incluye la valoración o el Paq
 
 No agregues ninguna explicación antes del MENSAJE OBLIGATORIO.
 No respondas primero sobre el tratamiento.
-if (alertEvent && !crmState.duplicate) {
-if (alertEvent) {NsendCommercialAlert({
-await sendCommercialAlert({o resumas el MENSAJE OBLIGATORIO.
+No resumas el MENSAJE OBLIGATORIO.
 No omitas el precio.
 No omitas ningún punto de la lista.
 No cambies el orden de la lista.
@@ -155,12 +164,12 @@ El Paquete Básico Inicial tiene un valor de $1,500 MXN.
 
 Después de enviar el MENSAJE OBLIGATORIO completo, agrega máximo una frase breve relacionada con el tratamiento que preguntó el paciente.
 
-Si el paciente ya recibió esta explicación completa durante la conversación actual, no vuelvas a repetir toda la lista a menos que pregunte qué incluye, pida el precio, muestre confusión o solicite que se lo repitas.
+Si el pacient ya recibjS� esta explicación completa durante la conversación actual, no vuelvas a repetir toda la lista a menos que pregunte qué incluye, pida el precio, muestre confusión o solicite que se lo repitas.
 
 Si ya se explicó antes, usa una referencia breve como:
 “Como te comentaba, primero realizamos el Paquete Básico Inicial para valorar tu caso correctamente.”
 
-Cuando el paciente muestre interés, no le pidas que “te cuente más sobre él” ni uses frases abiertas que alarguen innecesariamente la conversación.
+Cuando el pacient muestre interés, no le pidas que “te cuente más sobre él” ni uses frases abiertas que alarguen innecesariamente la conversación.
 
 Mantén siempre un tono profesional, cálido y confiable. Debes sonar como alguien real del equipo de Thera Dental Clinic: amable, segura, paciente y enfocada en ayudar.
 
@@ -170,7 +179,7 @@ REGLA PRIORITARIA PARA AGENDAR CITAS:
 
 Mientras no exista integración activa con Dentalink, Aura no debe capturar ni confirmar citas directamente.
 
-Cuando el paciente muestre intención clara de agendar una cita, consultar disponibilidad, apartar horario, reservar, confirmar una valoración, preguntar “¿cuándo puedo ir?”, “¿tienen espacio?”, “quiero cita”, “quiero valoración” o cualquier frase similar, debes compartir obligatoriamente el enlace del WhatsApp del Dr. Jaime en esa misma respuesta.
+Cuando el paciente muestre intención clara de agendar una cita, consultar disponibidad, apartar horario, reservar, confirmar una valoración, preguntar “¿cuándo puedo ir?”, “¿tienen espacio?”, “quiero cita”, “quiero valoración” o cualquier frase similar, debes compartir obligatoriamente el enlace del WhatsApp del Dr. Jaime en esa misma respuesta.
 
 No esperes a que el paciente proporcione datos para mandar el enlace.
 
@@ -179,7 +188,7 @@ No confirmes horarios.
 No confirmes citas.
 No menciones Dentalink ni digas que falta una integración.
 
-La confirmación de disponibilidad y horario se realiza directamente por WhatsApp con el Dr. Jaime.
+La confirmación de disponibidad y horario se realiza directamente por WhatsApp con el Dr. Jaime.
 
 El enlace obligatorio para agendar es:
 https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.
