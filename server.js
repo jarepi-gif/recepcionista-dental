@@ -10,6 +10,7 @@ const { extractInboundAttribution, syncInboundLead } = require('./ximgrowthos-sy
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { alertEventFor, sendCommercialAlert } = require('./commercial-alerts');
 const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
+const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
 const app = express();
 const historialConversaciones = {};
@@ -68,6 +69,19 @@ try {
     intakeReference: attribution.intakeReference,
     receivedAt: new Date().toISOString()
   });
+  if (crmState.openAiAdsConversion) {
+    try {
+      await sendOpenAiLeadConversion({
+        eventId: req.body.MessageSid,
+        occurredAt: new Date(),
+        oppref: crmState.openAiAdsConversion.oppref,
+        sourceUrl: crmState.openAiAdsConversion.sourceUrl
+      });
+      console.log('Conversión de OpenAI Ads aceptada:', req.body.MessageSid);
+    } catch (conversionError) {
+      console.error('Error enviando conversión a OpenAI Ads:', conversionError.message);
+    }
+  }
   detectedAlertEvent = alertEventFor(crmState);
   if (detectedAlertEvent) pendingCommercialAlerts.set(numero, detectedAlertEvent);
   const alertEvent = detectedAlertEvent || pendingCommercialAlerts.get(numero);
@@ -287,6 +301,9 @@ app.get('/health', (req, res) => {
     attributionParser: 'thera-reference-v1',
     ximgrowthosConfigured: Boolean(
       process.env.XIMGROWTHOS_INBOUND_URL && process.env.AURA_WEBHOOK_SECRET
+    ),
+    openAiAdsConversionsConfigured: Boolean(
+      process.env.OPENAI_ADS_CONVERSION_API_KEY && process.env.OPENAI_ADS_PIXEL_ID
     )
   });
 });
