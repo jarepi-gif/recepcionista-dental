@@ -8,7 +8,8 @@ test('A: intención explícita recibe avance breve', () => {
   const message = 'Quiero agendar una valoración.';
   assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
   const response = hotLeadResponse(message);
-  assert.equal(response, '¡Claro! Con gusto coordinamos tu valoración de Diseño de Sonrisa en THERA. ¿Qué día te gustaría acudir?');
+  assert.match(response, /Qué día y horario prefieres/);
+  assert.match(response, /wa\.me\/525664676808/);
   assert.doesNotMatch(response, /\$1,500|incluye|escáner|radiografía/i);
 });
 
@@ -27,10 +28,20 @@ test('C: pregunta exploratoria sigue la ruta informativa', () => {
 test('D: agenda mañana tiene prioridad y pide sólo horario', () => {
   const message = 'Quiero agendar mañana.';
   assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
-  assert.equal(hotLeadResponse(message), '¡Claro! Con gusto coordinamos tu valoración de Diseño de Sonrisa en THERA. ¿Qué horario te acomoda mañana?');
+  assert.match(hotLeadResponse(message), /Qué horario prefieres mañana/);
+  assert.match(hotLeadResponse(message), /wa\.me\/525664676808/);
 });
 
-test('E: displayName interno usa fallback seguro', () => {
+test('E: día y hora se reconocen sin repetir una pregunta contestada', () => {
+  const message = 'Quiero agendar mi valoración el jueves a las 4:00 p. m.';
+  assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
+  const response = hotLeadResponse(message);
+  assert.match(response, /Registré tu preferencia para el jueves a las 4:00 p\. m\./);
+  assert.doesNotMatch(response, /Qué día te gustaría/);
+  assert.match(response, /wa\.me\/525664676808/);
+});
+
+test('F: displayName interno usa fallback seguro', () => {
   assert.equal(resolvePatientDisplayName('Dr. Jaime Reyes'), PATIENT_NAME_FALLBACK);
   assert.equal(resolvePatientDisplayName('THERA Dental Clinic'), PATIENT_NAME_FALLBACK);
   assert.equal(resolvePatientDisplayName('Cuenta de prueba'), PATIENT_NAME_FALLBACK);

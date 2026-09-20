@@ -9,7 +9,8 @@ test('extracts the current THERA reference from the WhatsApp message', () => {
   assert.deepEqual(
     extractInboundAttribution('Quiero agendar una valoración. Referencia THERA: 2371DB1A5B06'),
     {
-      intakeToken: '2371DB1A5B06',
+      intakeToken: null,
+      intakeReference: '2371DB1A5B06',
       text: 'Quiero agendar una valoración.'
     }
   );
@@ -20,6 +21,7 @@ test('keeps compatibility with the legacy XIM UUID token', () => {
     extractInboundAttribution('Hola [XIM:10000000-0000-4000-8000-000000000001]'),
     {
       intakeToken: '10000000-0000-4000-8000-000000000001',
+      intakeReference: null,
       text: 'Hola'
     }
   );
@@ -28,6 +30,7 @@ test('keeps compatibility with the legacy XIM UUID token', () => {
 test('returns a clean message when no attribution token exists', () => {
   assert.deepEqual(extractInboundAttribution('Quiero información'), {
     intakeToken: null,
+    intakeReference: null,
     text: 'Quiero información'
   });
 });
