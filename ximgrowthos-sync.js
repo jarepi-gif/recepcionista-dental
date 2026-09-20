@@ -27,7 +27,13 @@ async function syncInboundLead(message, options = {}) {
     throw new Error('XimGrowthOS sync is not configured');
   }
 
-  const body = JSON.stringify(message);
+  // XimGrowthOS models optional attribution values as absent fields. Twilio
+  // conversations after the first attributed message legitimately have no
+  // token/reference, so never serialize those optional values as null.
+  const payload = Object.fromEntries(
+    Object.entries(message).filter(([, value]) => value !== null && value !== undefined)
+  );
+  const body = JSON.stringify(payload);
   const signature = `sha256=${crypto.createHmac('sha256', secret).update(body).digest('hex')}`;
   const response = await fetchImpl(endpoint, {
     method: 'POST',
