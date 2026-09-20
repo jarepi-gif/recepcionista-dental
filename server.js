@@ -13,6 +13,7 @@ const { classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = requi
 
 const app = express();
 const historialConversaciones = {};
+const alertedMessageSids = new Set();
 
 const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 
@@ -55,13 +56,23 @@ try {
     receivedAt: new Date().toISOString()
   });
   const alertEvent = alertEventFor(crmState);
-  if (alertEvent && !crmState.duplicate) {
-    sendCommercialAlert({
-      event: alertEvent,
-      patient: patientDisplayName,
-      treatment: 'Por confirmar',
-      action: 'Abrir XimGrowthOS para continuar'
-    }).catch((alertError) => console.error('Error enviando alerta comercial:', alertError.message));
+  // XimGrowthOS can legitimately report a duplicate while recovering a
+  // previously persisted webhook. The commercial handoff must still be
+  // delivered unless this running Aura process already sent it for the same
+  // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
+  if (alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
+    try {
+      const alertMessage = await sendCommercialAlert({
+        event: alertEvent,
+        patient: patientDisplayName,
+        treatment: 'Por confirmar',
+        action: 'Abrir XimGrowthOS para continuar'
+      });
+      alertedMessageSids.add(req.body.MessageSid);
+      console.log('Alerta comercial aceptada por Twilio:', alertMessage.sid, alertMessage.status || 'accepted');
+    } catch (alertError) {
+      console.error('Error enviando alerta comercial:', alertError.message);
+    }
   }
 } catch (syncError) {
   console.error('Error sincronizando con XimGrowthOS:', syncError.message);
@@ -123,9 +134,7 @@ Cuando el paciente pregunte explícitamente qué incluye la valoración o el Paq
 
 No agregues ninguna explicación antes del MENSAJE OBLIGATORIO.
 No respondas primero sobre el tratamiento.
-if (alertEvent && !crmState.duplicate) {
-if (alertEvent) {NsendCommercialAlert({
-await sendCommercialAlert({o resumas el MENSAJE OBLIGATORIO.
+No resumas el MENSAJE OBLIGATORIO.
 No omitas el precio.
 No omitas ningún punto de la lista.
 No cambies el orden de la lista.
