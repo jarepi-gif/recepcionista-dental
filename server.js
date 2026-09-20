@@ -123,7 +123,9 @@ Cuando el paciente pregunte explícitamente qué incluye la valoración o el Paq
 
 No agregues ninguna explicación antes del MENSAJE OBLIGATORIO.
 No respondas primero sobre el tratamiento.
-No resumas el MENSAJE OBLIGATORIO.
+if (alertEvent && !crmState.duplicate) {
+if (alertEvent) {NsendCommercialAlert({
+await sendCommercialAlert({o resumas el MENSAJE OBLIGATORIO.
 No omitas el precio.
 No omitas ningún punto de la lista.
 No cambies el orden de la lista.
