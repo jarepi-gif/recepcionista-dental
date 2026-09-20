@@ -65,6 +65,7 @@ try {
       const alertMessage = await sendCommercialAlert({
         event: alertEvent,
         patient: patientDisplayName,
+        patientPhone: numero,
         treatment: 'Por confirmar',
         action: 'Abrir XimGrowthOS para continuar'
       });

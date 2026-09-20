@@ -28,6 +28,19 @@ function alertConfig(env = process.env) {
   };
 }
 
+function patientContactDetails(patient, patientPhone) {
+  const name = String(patient || '').trim() || 'Nombre por confirmar';
+  let digits = String(patientPhone || '').replace(/\D/g, '');
+
+  // Twilio can still send Mexican mobile numbers in the legacy +521 format.
+  // wa.me requires the current +52 format without the extra mobile prefix.
+  if (/^521\d{10}$/.test(digits)) digits = `52${digits.slice(3)}`;
+
+  if (!digits) return `${name}\nWhatsApp: número por confirmar`;
+  const internationalPhone = `+${digits}`;
+  return `${name}\nWhatsApp: ${internationalPhone}\nResponder: https://wa.me/${digits}`;
+}
+
 async function sendCommercialAlert(input, options = {}) {
   if (!ALERTABLE_STATES.has(input.event)) throw new Error('Unsupported commercial alert event');
   const config = alertConfig(options.env);
@@ -37,7 +50,7 @@ async function sendCommercialAlert(input, options = {}) {
     to: config.to,
     contentSid: config.contentSid,
     contentVariables: JSON.stringify({
-      1: input.patient || 'Oportunidad de prueba',
+      1: patientContactDetails(input.patient, input.patientPhone),
       2: input.treatment || 'Por confirmar',
       3: input.event,
       4: input.action || 'Abrir XimGrowthOS para continuar'
@@ -45,4 +58,4 @@ async function sendCommercialAlert(input, options = {}) {
   });
 }
 
-module.exports = { ALERTABLE_STATES, alertConfig, alertEventFor, sendCommercialAlert };
+module.exports = { ALERTABLE_STATES, alertConfig, alertEventFor, patientContactDetails, sendCommercialAlert };
