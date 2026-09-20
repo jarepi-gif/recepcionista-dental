@@ -20,15 +20,15 @@ test('uses an isolated alert recipient and approved content SID', async () => {
   assert.equal(payload.from,'whatsapp:+5210000000000');
   assert.equal(payload.contentSid,'HXtest');
   const variables=JSON.parse(payload.contentVariables);
-  assert.equal(variables['1'],'Nombre Apellido\nWhatsApp: +525554536779\nResponder: https://wa.me/525554536779');
+  assert.equal(variables['1'],'Nombre Apellido | WhatsApp: +525554536779');
 });
 
 test('formats the patient name and WhatsApp number for the commercial alert', () => {
   assert.equal(
     patientContactDetails('María López', 'whatsapp:+525512345678'),
-    'María López\nWhatsApp: +525512345678\nResponder: https://wa.me/525512345678'
+    'María López | WhatsApp: +525512345678'
   );
-  assert.equal(patientContactDetails('', ''), 'Nombre por confirmar\nWhatsApp: número por confirmar');
+  assert.equal(patientContactDetails('', ''), 'Nombre por confirmar | WhatsApp: número por confirmar');
 });
 
 test('fails closed when alert configuration is incomplete', () => {
