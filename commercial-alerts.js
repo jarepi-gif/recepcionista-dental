@@ -36,9 +36,9 @@ function patientContactDetails(patient, patientPhone) {
   // wa.me requires the current +52 format without the extra mobile prefix.
   if (/^521\d{10}$/.test(digits)) digits = `52${digits.slice(3)}`;
 
-  if (!digits) return `${name}\nWhatsApp: número por confirmar`;
+  if (!digits) return `${name} | WhatsApp: número por confirmar`;
   const internationalPhone = `+${digits}`;
-  return `${name}\nWhatsApp: ${internationalPhone}\nResponder: https://wa.me/${digits}`;
+  return `${name} | WhatsApp: ${internationalPhone}`;
 }
 
 async function sendCommercialAlert(input, options = {}) {
