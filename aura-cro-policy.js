@@ -22,6 +22,21 @@ const INVALID_PATIENT_NAMES = [
 
 const PATIENT_NAME_FALLBACK = 'Contacto de WhatsApp — nombre por confirmar';
 
+function isFullName(value) {
+  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+  return words.length >= 2 && words.every((word) => /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]{2,}$/.test(word));
+}
+
+function extractPatientFullName(message, acceptPlainName = false) {
+  const text = String(message || '').trim();
+  const introduced = text.match(/\b(?:soy|me llamo|mi nombre es)\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]+){1,5})/i)?.[1]
+    ?.replace(/\s+(?:y|quiero|deseo|para)\s.*$/i, '')
+    .trim();
+  if (isFullName(introduced)) return introduced;
+  if (acceptPlainName && isFullName(text)) return text;
+  return null;
+}
+
 function normalize(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
     .replace(/[^a-z0-9\s.,:?¿!¡$]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -61,4 +76,11 @@ function resolvePatientDisplayName(displayName) {
   return INVALID_PATIENT_NAMES.some((pattern) => pattern.test(normalized)) ? PATIENT_NAME_FALLBACK : candidate;
 }
 
-module.exports = { PATIENT_NAME_FALLBACK, classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName };
+module.exports = {
+  PATIENT_NAME_FALLBACK,
+  classifyAuraIntent,
+  extractPatientFullName,
+  hotLeadResponse,
+  isFullName,
+  resolvePatientDisplayName
+};

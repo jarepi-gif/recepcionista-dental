@@ -9,11 +9,14 @@ const { addTreatmentToTransferLink } = require('./transfer-link');
 const { extractInboundAttribution, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { alertEventFor, sendCommercialAlert } = require('./commercial-alerts');
-const { classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
+const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
 
 const app = express();
 const historialConversaciones = {};
 const alertedMessageSids = new Set();
+const patientFullNames = new Map();
+const awaitingFullName = new Set();
+const pendingCommercialAlerts = new Map();
 
 const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 
@@ -30,6 +33,13 @@ app.post('/whatsapp', async (req, res) => {
     const numero = req.body.From;
     const patientDisplayName = resolvePatientDisplayName(req.body.ProfileName);
     const auraIntent = classifyAuraIntent(mensaje);
+    const wasAwaitingFullName = awaitingFullName.has(numero);
+    const suppliedFullName = extractPatientFullName(mensaje, wasAwaitingFullName);
+    if (suppliedFullName) {
+      patientFullNames.set(numero, suppliedFullName);
+      awaitingFullName.delete(numero);
+    }
+    const verifiedFullName = suppliedFullName || patientFullNames.get(numero);
 
 if (!historialConversaciones[numero]) {
   historialConversaciones[numero] = [];
@@ -43,6 +53,7 @@ historialConversaciones[numero] = appendMessage(
 
 // El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
 let crmState = { patientState: 'UNKNOWN', commercialSuppression: true, humanHandoffRequired: false };
+let detectedAlertEvent = null;
 try {
   const attribution = extractInboundAttribution(mensaje);
   crmState = await syncInboundLead({
@@ -55,21 +66,24 @@ try {
     intakeReference: attribution.intakeReference,
     receivedAt: new Date().toISOString()
   });
-  const alertEvent = alertEventFor(crmState);
+  detectedAlertEvent = alertEventFor(crmState);
+  if (detectedAlertEvent) pendingCommercialAlerts.set(numero, detectedAlertEvent);
+  const alertEvent = detectedAlertEvent || pendingCommercialAlerts.get(numero);
   // XimGrowthOS can legitimately report a duplicate while recovering a
   // previously persisted webhook. The commercial handoff must still be
   // delivered unless this running Aura process already sent it for the same
   // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
-  if (alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
+  if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSid)) {
     try {
       const alertMessage = await sendCommercialAlert({
         event: alertEvent,
-        patient: patientDisplayName,
+        patient: verifiedFullName,
         patientPhone: numero,
         treatment: 'Por confirmar',
         action: 'Abrir XimGrowthOS para continuar'
       });
       alertedMessageSids.add(req.body.MessageSid);
+      pendingCommercialAlerts.delete(numero);
       console.log('Alerta comercial aceptada por Twilio:', alertMessage.sid, alertMessage.status || 'accepted');
     } catch (alertError) {
       console.error('Error enviando alerta comercial:', alertError.message);
@@ -82,6 +96,25 @@ try {
 // El historial se limita por turnos para conservar contexto sin elevar el consumo.
     console.log('Mensaje recibido:', mensaje);
     console.log('De:', numero);
+
+    if (auraIntent === 'INTENCION_DE_AGENDAR' && !patientFullNames.has(numero)) {
+      awaitingFullName.add(numero);
+      const texto = 'Con gusto te ayudamos a continuar con tu valoración. Para registrar correctamente tu solicitud, ¿me compartes tu nombre completo, por favor?';
+      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
+      const twiml = new twilio.twiml.MessagingResponse();
+      twiml.message(texto);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
+
+    if (suppliedFullName && (wasAwaitingFullName || detectedAlertEvent) && pendingCommercialAlerts.has(numero) === false) {
+      const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Para confirmar disponibilidad y horario con el Dr. Jaime Reyes, escríbele aquí: https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.`;
+      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
+      const twiml = new twilio.twiml.MessagingResponse();
+      twiml.message(texto);
+      res.type('text/xml');
+      return res.send(twiml.toString());
+    }
 
     if (auraIntent === 'INTENCION_DE_AGENDAR' && crmState.patientState !== 'APPOINTMENT_SCHEDULED' && !crmState.humanHandoffRequired) {
       const texto = hotLeadResponse(mensaje);

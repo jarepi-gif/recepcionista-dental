@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { PATIENT_NAME_FALLBACK, classifyAuraIntent, hotLeadResponse, resolvePatientDisplayName } = require('../aura-cro-policy');
+const { PATIENT_NAME_FALLBACK, classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('../aura-cro-policy');
 
 test('A: intención explícita recibe avance breve', () => {
   const message = 'Quiero agendar una valoración.';
@@ -46,4 +46,11 @@ test('F: displayName interno usa fallback seguro', () => {
   assert.equal(resolvePatientDisplayName('THERA Dental Clinic'), PATIENT_NAME_FALLBACK);
   assert.equal(resolvePatientDisplayName('Cuenta de prueba'), PATIENT_NAME_FALLBACK);
   assert.equal(resolvePatientDisplayName('María López'), 'María López');
+});
+
+test('G: obtiene el nombre completo declarado por el paciente', () => {
+  assert.equal(extractPatientFullName('Soy Jaime Augusto Reyes Pinzón y quiero agendar'), 'Jaime Augusto Reyes Pinzón');
+  assert.equal(extractPatientFullName('Mi nombre es María López'), 'María López');
+  assert.equal(extractPatientFullName('María López', true), 'María López');
+  assert.equal(extractPatientFullName('Jaime', true), null);
 });
