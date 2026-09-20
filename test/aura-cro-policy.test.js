@@ -52,5 +52,6 @@ test('G: obtiene el nombre completo declarado por el paciente', () => {
   assert.equal(extractPatientFullName('Soy Jaime Augusto Reyes Pinzón y quiero agendar'), 'Jaime Augusto Reyes Pinzón');
   assert.equal(extractPatientFullName('Mi nombre es María López'), 'María López');
   assert.equal(extractPatientFullName('María López', true), 'María López');
+  assert.equal(extractPatientFullName('Jaime Augusto Reyes Pinzón', true), 'Jaime Augusto Reyes Pinzón');
   assert.equal(extractPatientFullName('Jaime', true), null);
 });

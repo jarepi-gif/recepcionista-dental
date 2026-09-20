@@ -34,7 +34,9 @@ app.post('/whatsapp', async (req, res) => {
     const patientDisplayName = resolvePatientDisplayName(req.body.ProfileName);
     const auraIntent = classifyAuraIntent(mensaje);
     const wasAwaitingFullName = awaitingFullName.has(numero);
-    const suppliedFullName = extractPatientFullName(mensaje, wasAwaitingFullName);
+    // A reply containing only a full name must remain recognizable after a
+    // Render restart, even when the in-memory "awaiting" flag was lost.
+    const suppliedFullName = extractPatientFullName(mensaje, true);
     if (suppliedFullName) {
       patientFullNames.set(numero, suppliedFullName);
       awaitingFullName.delete(numero);
@@ -60,7 +62,7 @@ try {
     eventId: req.body.MessageSid,
     conversationId: numero,
     phone: numero,
-    displayName: patientDisplayName,
+    displayName: suppliedFullName || patientFullNames.get(numero) || patientDisplayName,
     text: attribution.text,
     intakeToken: attribution.intakeToken,
     intakeReference: attribution.intakeReference,
