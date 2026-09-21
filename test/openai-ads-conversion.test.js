@@ -34,3 +34,15 @@ test('fails closed without attribution or configuration', async () => {
   assert.throws(() => buildLeadCreatedEvent(base), /oppref/);
   await assert.rejects(() => sendOpenAiLeadConversion({ ...base, oppref: 'ref' }, { env: {} }), /API key/);
 });
+
+test('accepts the legacy server-only API key name during migration', async () => {
+  let authorization;
+  const fetchImpl = async (_url, options) => {
+    authorization = options.headers.authorization;
+    return { ok: true, json: async () => ({ accepted: 1 }) };
+  };
+  await sendOpenAiLeadConversion({ eventId: 'SM999', occurredAt: new Date(), oppref: 'ref', sourceUrl: 'https://theradentalclinic.com/' }, {
+    env: { OPENAI_ADS_CONVERSION_API_KEY: 'legacy-secret', OPENAI_ADS_PIXEL_ID: 'pixel' }, fetchImpl
+  });
+  assert.equal(authorization, 'Bearer legacy-secret');
+});
