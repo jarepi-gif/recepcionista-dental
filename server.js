@@ -303,7 +303,7 @@ app.get('/health', (req, res) => {
       process.env.XIMGROWTHOS_INBOUND_URL && process.env.AURA_WEBHOOK_SECRET
     ),
     openAiAdsConversionsConfigured: Boolean(
-      process.env.OPENAI_ADS_CONVERSION_API_KEY && process.env.OPENAI_ADS_PIXEL_ID
+      process.env.OPENAI_ADS_CONVERSIONS_API_KEY && process.env.OPENAI_ADS_PIXEL_ID
     )
   });
 });

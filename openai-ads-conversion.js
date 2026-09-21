@@ -10,6 +10,8 @@ function normalizeSourceUrl(value) {
   const sourceUrl = required(value, 'OpenAI Ads source URL');
   const parsed = new URL(sourceUrl);
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('OpenAI Ads source URL must use HTTP(S)');
+  parsed.search = '';
+  parsed.hash = '';
   return parsed.toString();
 }
 
@@ -30,7 +32,7 @@ function buildLeadCreatedEvent({ eventId, occurredAt, oppref, sourceUrl }) {
 async function sendOpenAiLeadConversion(input, options = {}) {
   const env = options.env || process.env;
   const fetchImpl = options.fetchImpl || fetch;
-  const apiKey = required(env.OPENAI_ADS_CONVERSION_API_KEY, 'OpenAI Ads conversion API key');
+  const apiKey = required(env.OPENAI_ADS_CONVERSIONS_API_KEY, 'OpenAI Ads conversions API key');
   const pixelId = required(env.OPENAI_ADS_PIXEL_ID, 'OpenAI Ads pixel ID');
   const payload = {
     validate_only: Boolean(options.validateOnly),
