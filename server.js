@@ -8,7 +8,7 @@ const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
 const { extractInboundAttribution, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
-const { alertEventFor, sendCommercialAlert } = require('./commercial-alerts');
+const { resolveCommercialAlertEvent, sendCommercialAlert } = require('./commercial-alerts');
 const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
 const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
@@ -56,7 +56,6 @@ historialConversaciones[numero] = appendMessage(
 
 // El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
 let crmState = { patientState: 'UNKNOWN', commercialSuppression: true, humanHandoffRequired: false };
-let detectedAlertEvent = null;
 try {
   const attribution = extractInboundAttribution(mensaje);
   crmState = await syncInboundLead({
@@ -82,31 +81,40 @@ try {
       console.error('Error enviando conversión a OpenAI Ads:', conversionError.message);
     }
   }
-  detectedAlertEvent = alertEventFor(crmState);
-  if (detectedAlertEvent) pendingCommercialAlerts.set(numero, detectedAlertEvent);
-  const alertEvent = detectedAlertEvent || pendingCommercialAlerts.get(numero);
-  // XimGrowthOS can legitimately report a duplicate while recovering a
-  // previously persisted webhook. The commercial handoff must still be
-  // delivered unless this running Aura process already sent it for the same
-  // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
-  if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSid)) {
-    try {
-      const alertMessage = await sendCommercialAlert({
-        event: alertEvent,
-        patient: verifiedFullName,
-        patientPhone: numero,
-        treatment: 'Por confirmar',
-        action: 'Abrir XimGrowthOS para continuar'
-      });
-      alertedMessageSids.add(req.body.MessageSid);
-      pendingCommercialAlerts.delete(numero);
-      console.log('Alerta comercial aceptada por Twilio:', alertMessage.sid, alertMessage.status || 'accepted');
-    } catch (alertError) {
-      console.error('Error enviando alerta comercial:', alertError.message);
-    }
-  }
 } catch (syncError) {
   console.error('Error sincronizando con XimGrowthOS:', syncError.message);
+}
+
+// Aura's own intent classification is an independent commercial signal. Keep
+// the alert pending even if Xim is temporarily unavailable or returns a state
+// that has not yet advanced, then deliver it as soon as the name is available.
+const detectedAlertEvent = resolveCommercialAlertEvent(
+  crmState,
+  auraIntent,
+  pendingCommercialAlerts.get(numero)
+);
+if (detectedAlertEvent) pendingCommercialAlerts.set(numero, detectedAlertEvent);
+const alertEvent = pendingCommercialAlerts.get(numero);
+
+// XimGrowthOS can legitimately report a duplicate while recovering a
+// previously persisted webhook. The commercial handoff must still be
+// delivered unless this running Aura process already sent it for the same
+// Twilio MessageSid. Await Twilio so acceptance/failure is observable.
+if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSid)) {
+  try {
+    const alertMessage = await sendCommercialAlert({
+      event: alertEvent,
+      patient: verifiedFullName,
+      patientPhone: numero,
+      treatment: 'Por confirmar',
+      action: 'Abrir XimGrowthOS para continuar'
+    });
+    alertedMessageSids.add(req.body.MessageSid);
+    pendingCommercialAlerts.delete(numero);
+    console.log('Alerta comercial aceptada por Twilio:', alertMessage.sid, alertMessage.status || 'accepted');
+  } catch (alertError) {
+    console.error('Error enviando alerta comercial:', alertError.message);
+  }
 }
 
 // El historial se limita por turnos para conservar contexto sin elevar el consumo.
@@ -123,7 +131,7 @@ try {
       return res.send(twiml.toString());
     }
 
-    if (suppliedFullName && (wasAwaitingFullName || detectedAlertEvent) && pendingCommercialAlerts.has(numero) === false) {
+    if (suppliedFullName && (wasAwaitingFullName || detectedAlertEvent)) {
       const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Para confirmar disponibilidad y horario con el Dr. Jaime Reyes, escríbele aquí: https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.`;
       historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
       const twiml = new twilio.twiml.MessagingResponse();
