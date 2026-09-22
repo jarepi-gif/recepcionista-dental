@@ -6,7 +6,7 @@ const twilio = require('twilio');
 const fs = require('fs');
 const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
-const { extractInboundAttribution, syncInboundLead } = require('./ximgrowthos-sync');
+const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { resolveCommercialAlertEvent, sendCommercialAlert } = require('./commercial-alerts');
 const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
@@ -18,6 +18,8 @@ const alertedMessageSids = new Set();
 const patientFullNames = new Map();
 const awaitingFullName = new Set();
 const pendingCommercialAlerts = new Map();
+const activeTestConversations = new Map();
+const TEST_CONVERSATION_TTL_MS = 15 * 60 * 1000;
 
 const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 
@@ -58,28 +60,48 @@ historialConversaciones[numero] = appendMessage(
 let crmState = { patientState: 'UNKNOWN', commercialSuppression: true, humanHandoffRequired: false };
 try {
   const attribution = extractInboundAttribution(mensaje);
-  crmState = await syncInboundLead({
-    eventId: req.body.MessageSid,
-    conversationId: numero,
-    phone: numero,
-    displayName: suppliedFullName || patientFullNames.get(numero) || patientDisplayName,
-    text: attribution.text,
+  const activeTestUntil = activeTestConversations.get(numero) || 0;
+  const activeTestConversation = activeTestUntil > Date.now();
+  if (activeTestUntil && !activeTestConversation) activeTestConversations.delete(numero);
+
+  if (shouldSyncInboundLead({
+    activeTestConversation,
     intakeToken: attribution.intakeToken,
-    intakeReference: attribution.intakeReference,
-    receivedAt: new Date().toISOString()
-  });
-  if (crmState.openAiAdsConversion) {
-    try {
-      await sendOpenAiLeadConversion({
-        eventId: req.body.MessageSid,
-        occurredAt: new Date(),
-        oppref: crmState.openAiAdsConversion.oppref,
-        sourceUrl: crmState.openAiAdsConversion.sourceUrl
-      });
-      console.log('Conversión de OpenAI Ads aceptada:', req.body.MessageSid);
-    } catch (conversionError) {
-      console.error('Error enviando conversión a OpenAI Ads:', conversionError.message);
+    intakeReference: attribution.intakeReference
+  })) {
+    crmState = await syncInboundLead({
+      eventId: req.body.MessageSid,
+      conversationId: numero,
+      phone: numero,
+      displayName: suppliedFullName || patientFullNames.get(numero) || patientDisplayName,
+      text: attribution.text,
+      intakeToken: attribution.intakeToken,
+      intakeReference: attribution.intakeReference,
+      receivedAt: new Date().toISOString()
+    });
+    if (crmState.isTest) {
+      activeTestConversations.set(numero, Date.now() + TEST_CONVERSATION_TTL_MS);
     }
+    if (crmState.openAiAdsConversion) {
+      try {
+        await sendOpenAiLeadConversion({
+          eventId: req.body.MessageSid,
+          occurredAt: new Date(),
+          oppref: crmState.openAiAdsConversion.oppref,
+          sourceUrl: crmState.openAiAdsConversion.sourceUrl
+        });
+        console.log('Conversión de OpenAI Ads aceptada:', req.body.MessageSid);
+      } catch (conversionError) {
+        console.error('Error enviando conversión a OpenAI Ads:', conversionError.message);
+      }
+    }
+  } else {
+    crmState = {
+      patientState: 'HANDOFF_PENDING_CONFIRMATION',
+      commercialSuppression: true,
+      humanHandoffRequired: false,
+      isTest: true
+    };
   }
 } catch (syncError) {
   console.error('Error sincronizando con XimGrowthOS:', syncError.message);
