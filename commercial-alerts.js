@@ -15,6 +15,13 @@ function alertEventFor(syncResult = {}) {
   return null;
 }
 
+function resolveCommercialAlertEvent(syncResult = {}, auraIntent, pendingEvent) {
+  return alertEventFor(syncResult)
+    || (auraIntent === 'INTENCION_DE_AGENDAR' ? 'INTENCION_DE_AGENDAR' : null)
+    || pendingEvent
+    || null;
+}
+
 function alertConfig(env = process.env) {
   const required = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_WHATSAPP_NUMBER', 'THERA_ALERT_RECIPIENT', 'THERA_ALERT_CONTENT_SID'];
   const missing = required.filter((key) => !env[key]);
@@ -58,4 +65,11 @@ async function sendCommercialAlert(input, options = {}) {
   });
 }
 
-module.exports = { ALERTABLE_STATES, alertConfig, alertEventFor, patientContactDetails, sendCommercialAlert };
+module.exports = {
+  ALERTABLE_STATES,
+  alertConfig,
+  alertEventFor,
+  resolveCommercialAlertEvent,
+  patientContactDetails,
+  sendCommercialAlert
+};
