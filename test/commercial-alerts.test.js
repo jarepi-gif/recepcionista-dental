@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { alertConfig, alertEventFor, patientContactDetails, sendCommercialAlert } = require('../commercial-alerts');
+const { alertConfig, alertEventFor, resolveCommercialAlertEvent, patientContactDetails, sendCommercialAlert } = require('../commercial-alerts');
 
 const env = { TWILIO_ACCOUNT_SID:'ACtest', TWILIO_AUTH_TOKEN:'secret', TWILIO_WHATSAPP_NUMBER:'+5210000000000', THERA_ALERT_RECIPIENT:'+5256000000000', THERA_ALERT_CONTENT_SID:'HXtest' };
 
@@ -9,6 +9,18 @@ test('maps commercial states without alerting normal conversations', () => {
   assert.equal(alertEventFor({patientState:'VALUATION_REQUESTED'}), 'VALUATION_REQUESTED');
   assert.equal(alertEventFor({patientState:'HANDOFF_PENDING_CONFIRMATION'}), 'INTENCION_DE_AGENDAR');
   assert.equal(alertEventFor({humanHandoffRequired:true}), 'HUMAN_HANDOFF_REQUIRED');
+});
+
+test('keeps an Aura scheduling intent alertable when Xim has not advanced state', () => {
+  assert.equal(
+    resolveCommercialAlertEvent({patientState:'NORMAL'}, 'INTENCION_DE_AGENDAR', null),
+    'INTENCION_DE_AGENDAR'
+  );
+  assert.equal(
+    resolveCommercialAlertEvent({patientState:'UNKNOWN'}, 'OTRO', 'INTENCION_DE_AGENDAR'),
+    'INTENCION_DE_AGENDAR'
+  );
+  assert.equal(resolveCommercialAlertEvent({patientState:'NORMAL'}, 'OTRO', null), null);
 });
 
 test('uses an isolated alert recipient and approved content SID', async () => {
