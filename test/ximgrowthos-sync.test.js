@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 
-const { extractInboundAttribution, syncInboundLead } = require('../ximgrowthos-sync');
+const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('../ximgrowthos-sync');
 
 
 test('extracts the current THERA reference from the WhatsApp message', () => {
@@ -33,6 +33,12 @@ test('returns a clean message when no attribution token exists', () => {
     intakeReference: null,
     text: 'Quiero información'
   });
+});
+
+test('does not resync unattributed follow-ups from an active signed test conversation', () => {
+  assert.equal(shouldSyncInboundLead({ activeTestConversation: true }), false);
+  assert.equal(shouldSyncInboundLead({ activeTestConversation: true, intakeReference: '112F5F10804B' }), true);
+  assert.equal(shouldSyncInboundLead({ activeTestConversation: false }), true);
 });
 
 test('signs and sends an inbound message to XimGrowthOS', async () => {
