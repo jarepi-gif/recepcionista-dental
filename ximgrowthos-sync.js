@@ -18,6 +18,10 @@ function extractInboundAttribution(message = '') {
   return { intakeToken, intakeReference, text: cleanText };
 }
 
+function shouldSyncInboundLead({ activeTestConversation = false, intakeToken, intakeReference } = {}) {
+  return !activeTestConversation || Boolean(intakeToken || intakeReference);
+}
+
 async function syncInboundLead(message, options = {}) {
   const endpoint = options.endpoint || process.env.XIMGROWTHOS_INBOUND_URL;
   const secret = options.secret || process.env.AURA_WEBHOOK_SECRET;
@@ -52,4 +56,4 @@ async function syncInboundLead(message, options = {}) {
   return response.json();
 }
 
-module.exports = { extractInboundAttribution, syncInboundLead };
+module.exports = { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead };
