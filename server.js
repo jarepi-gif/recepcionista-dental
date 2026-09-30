@@ -9,7 +9,7 @@ const { appendMessage } = require('./conversation-history');
 const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { resolveCommercialAlertEvent, sendCommercialAlert } = require('./commercial-alerts');
-const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, isFullName } = require('./aura-cro-policy');
+const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, isFullName, cleanNameHistory } = require('./aura-cro-policy');
 const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
 const app = express();
@@ -28,7 +28,7 @@ app.use(express.json());
 
 const inbox = installInbox(app);
 async function replyAura(req, res, text) {
-  if (inbox.enabled) return inbox.respond(req, res, keepOfficialChat(text));
+  if (inbox.enabled && !req.auraDiagnostic) return inbox.respond(req, res, keepOfficialChat(text));
   const response = new twilio.twiml.MessagingResponse();
   response.message(keepOfficialChat(text));
   return res.type('text/xml').send(response.toString());
@@ -38,8 +38,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
-app.post('/whatsapp', async (req, res) => {
-  if (inbox.enabled) {
+async function handleWhatsApp(req, res) {
+  if (inbox.enabled && !req.auraDiagnostic) {
     if (!inbox.validate(req)) return res.sendStatus(403);
     try {
       const conversation = await inbox.store.inbound(req.body);
@@ -61,12 +61,12 @@ app.post('/whatsapp', async (req, res) => {
     const suppliedFullName = extractPatientFullName(mensaje, true);
     if (suppliedFullName) {
       patientFullNames.set(numero, suppliedFullName);
-      if (inbox.enabled) await inbox.store.mutate(numero, data => ({ ...data, name: suppliedFullName, nameVerified: true }));
+      if (inbox.enabled && !req.auraDiagnostic) await inbox.store.mutate(numero, data => ({ ...data, name: suppliedFullName, nameVerified: true }));
       awaitingFullName.delete(numero);
     }
     const verifiedFullName = suppliedFullName || patientFullNames.get(numero);
 
-if (inbox.enabled) {
+if (inbox.enabled && !req.auraDiagnostic) {
   historialConversaciones[numero] = await inbox.context(numero, req.body.MessageSid);
 }
 if (!historialConversaciones[numero]) {
@@ -82,6 +82,9 @@ historialConversaciones[numero] = appendMessage(
 // El alta en XimGrowthOS no interrumpe la atención de Aura si el CRM no responde.
 let crmState = { patientState: 'UNKNOWN', commercialSuppression: true, humanHandoffRequired: false };
 try {
+  if (req.auraDiagnostic) {
+    crmState = { patientState: 'VALUATION_REQUESTED', commercialSuppression: false, humanHandoffRequired: false };
+  } else {
   const attribution = extractInboundAttribution(mensaje);
   const activeTestUntil = activeTestConversations.get(numero) || 0;
   const activeTestConversation = activeTestUntil > Date.now();
@@ -126,6 +129,7 @@ try {
       isTest: true
     };
   }
+  }
 } catch (syncError) {
   console.error('Error sincronizando con XimGrowthOS:', syncError.message);
 }
@@ -147,7 +151,7 @@ const alertEvent = pendingCommercialAlerts.get(numero);
 // previously persisted webhook. The commercial handoff must still be
 // delivered unless this running Aura process already sent it for the same
 // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
-if (alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
+if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
   try {
     const alertMessage = await sendCommercialAlert({
       event: alertEvent,
@@ -309,6 +313,25 @@ Responde siempre en español de forma natural y conversacional, como una persona
     try { return await replyAura(req, res, 'Hola, soy Aura de Thera Dental Clinic. En un momento te apoyamos 🦷'); }
     catch (replyError) { return res.sendStatus(503); }
   }
+}
+app.post('/whatsapp', handleWhatsApp);
+if (inbox.enabled) app.post('/api/inbox/check-response', async (req, res) => {
+  const message = String(req.body.message || '').trim();
+  if (!message || message.length > 1000) return res.status(400).json({error:'Mensaje de prueba inválido.'});
+  const id = 'diagnostic:' + require('node:crypto').randomUUID();
+  const testReq = {auraDiagnostic:true, body:{Body:message, From:id, MessageSid:id, ProfileName:''}};
+  historialConversaciones[id] = cleanNameHistory([
+    {role:'user',content:'JR Hola quiero mas informacion'},
+    {role:'assistant',content:'Gracias, JR Hola quiero mas informacion. Registré tu nombre y tu solicitud.'}
+  ]);
+  let status=200;
+  let xml='';
+  const testRes = {type(){return this;},status(value){status=value;return this;},send(value){xml=String(value);return this;},sendStatus(value){status=value;return this;}};
+  try {
+    await handleWhatsApp(testReq,testRes);
+    return res.status(status).json({diagnostic:true,name:extractPatientFullName(message,true),intent:classifyAuraIntent(message),responseXml:xml,patientMessagesSent:0});
+  } catch(error) {return res.status(503).json({error:'No se pudo completar la prueba de Aura.'});}
+  finally {delete historialConversaciones[id];patientFullNames.delete(id);awaitingFullName.delete(id);pendingCommercialAlerts.delete(id);activeTestConversations.delete(id);alertedMessageSids.delete(id);}
 });
 
 app.get('/', (req, res) => {
@@ -320,7 +343,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     inboxEnabled: inbox.enabled,
     inboxVersion: '1.0.0',
-    nameDetectionVersion: '2.0.0',
+    nameDetectionVersion: '2.1.0',
     schedulingChannel: 'official-whatsapp',
     attributionParser: 'thera-reference-v1',
     ximgrowthosConfigured: Boolean(
