@@ -35,7 +35,7 @@ class InboxStore {
   }
   async inbound(body) {
     const name=String(body.ProfileName || '').slice(0,120);
-    return this.mutate(body.From, data=>({...data,name:data.nameVerified && isFullName(data.name)?data.name:name || data.name,lastInbound:new Date().toISOString(),preview:String(body.Body || '[Archivo recibido]').slice(0,160)}));
+    return this.mutate(body.From, data=>({...data,name:data.nameVerified && isFullName(data.name)?data.name:name || data.name,lastInbound:body.MessageSid && data.lastInboundSid===body.MessageSid?data.lastInbound:new Date().toISOString(),lastInboundSid:body.MessageSid,preview:String(body.Body || '[Archivo recibido]').slice(0,160)}));
   }
   async mode(phone) { return (await this.ensure(phone)).data.mode; }
   async list() { return (await this.documents.list({limit:1000})).filter(d=>d.uniqueName?.startsWith(PREFIX)).map(d=>d.data).sort((a,b)=>String(b.lastInbound||'').localeCompare(String(a.lastInbound||''))); }
@@ -49,6 +49,17 @@ function installInbox(app, env=process.env, clientOverride=null) {
   const client=clientOverride||twilio(env.TWILIO_ACCOUNT_SID,env.TWILIO_AUTH_TOKEN);
   const from=phoneNumber(env.TWILIO_WHATSAPP_NUMBER);
   const store=new InboxStore(client);
+  const push=require('./inbox-push').createPushService(client,origin);
+  async function alertInbound(body,input={}) {
+    if(!/^SM[a-fA-F0-9]{32}$/.test(String(body.MessageSid||'')))throw new Error('Identificador inválido de mensaje');
+    const documents=store.documents,claim='thera-alert-event-'+body.MessageSid;
+    try{await documents.create({uniqueName:claim,data:{state:'pending',phone:body.From},ttl:172800});}
+    catch(e){if(e.status!==409)throw e;return {...(await documents(claim).fetch()).data,duplicate:true};}
+    const alerts=require('./commercial-alerts');
+    const result=await alerts.sendCommercialAlert({event:input.event||alerts.inboundInterestEvent(body.Body)||'HUMAN_HANDOFF_REQUIRED',patient:input.patient||body.ProfileName||'Nombre por confirmar',patientPhone:body.From,treatment:input.treatment||alerts.inboundTreatment(body.Body),action:`Ver conversación: ${origin}/bandeja?phone=${encodeURIComponent(body.From)}`},{env,client});
+    await documents(claim).update({data:{state:result.status,sid:result.sid,phone:body.From}});
+    return {sid:result.sid,status:result.status};
+  }
   const locks=new Map();
   async function locked(phone,fn) {
     const previous=locks.get(phone)||Promise.resolve();
@@ -78,6 +89,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"});
     res.sendFile(path.join(__dirname,'inbox-public','index.html'));
   });
+  app.get('/inbox-sw.js',(req,res)=>{res.set({'Cache-Control':'no-cache','Service-Worker-Allowed':'/'});res.sendFile(path.join(__dirname,'inbox-public','inbox-sw.js'));});
   app.use('/inbox-assets',require('express').static(path.join(__dirname,'inbox-public'),{dotfiles:'deny'}));
   app.post('/api/inbox/session',(req,res)=>{
     res.set('Cache-Control','no-store');
@@ -91,6 +103,19 @@ function installInbox(app, env=process.env, clientOverride=null) {
   app.use('/api/inbox',auth);
   app.post('/api/inbox/logout',(req,res)=>{res.set('Set-Cookie','thera_inbox=; HttpOnly; Secure; SameSite=Strict; Path=/api/inbox; Max-Age=0');res.json({ok:true});});
   app.get('/api/inbox/conversations',route(async(req,res)=>{res.json({conversations:await store.list()});}));
+  app.get('/api/inbox/push-key',route(async(req,res)=>{res.json({publicKey:(await push.keys()).publicKey});}));
+  app.post('/api/inbox/push-subscription',route(async(req,res)=>{await push.subscribe(req.body.subscription);res.json({ok:true});}));
+  app.post('/api/inbox/push-test',route(async(req,res)=>{res.json(await push.send({title:'Avisos de Thera activados',body:'Sonido y vibración dependen de los ajustes de tu celular.',eventId:'test-'+Date.now(),url:origin+'/bandeja'}));}));
+  app.post('/api/inbox/alerts/recover',route(async(req,res)=>{
+    const phone=phoneNumber(req.body.phone);const messages=await client.messages.list({from:phone,to:from,limit:10});const latest=messages.sort((a,b)=>b.dateCreated-a.dateCreated)[0];if(!latest)return res.status(404).json({error:'No hay mensajes recibidos para esa conversación.'});
+    const data=(await store.ensure(phone)).data;res.json(await alertInbound({From:phone,Body:latest.body,MessageSid:latest.sid,ProfileName:data.name}));
+  }));
+  app.get('/api/inbox/alerts/status',route(async(req,res)=>{
+    const sid=String(req.query.sid||'');if(!/^SM[a-fA-F0-9]{32}$/.test(sid))return res.sendStatus(400);
+    const message=await client.messages(sid).fetch();const recipient=phoneNumber(env.THERA_ALERT_RECIPIENT);
+    const canonical=value=>String(value).replace(/\D/g,'').replace(/^521(?=\d{10}$)/,'52');
+    if(canonical(message.to)!==canonical(recipient))return res.sendStatus(403);res.json({sid:message.sid,status:message.status,errorCode:message.errorCode,errorMessage:message.errorMessage});
+  }));
   app.get('/api/inbox/alert-template',route(async(req,res)=>{
     const result=await require('./inbox-alert-template').templateStatus(client);
     const recipient=String(env.THERA_ALERT_RECIPIENT||'').replace(/\D/g,'').replace(/^521(?=\d{10}$)/,'52');
@@ -150,7 +175,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     });
   }));
   return {
-    enabled:true,store,
+    enabled:true,store,alertInbound,notifyInbound:push.notifyInbound,
     async context(phone, currentSid) {
       const rows=await Promise.all([client.messages.list({from:phone,to:from,limit:14}),client.messages.list({from,to:phone,limit:14})]);
       const history=cleanNameHistory(rows.flat().filter(m=>m.sid!==currentSid && m.body && !['failed','undelivered'].includes(m.status)).sort((a,b)=>a.dateCreated-b.dateCreated).slice(-14).map(m=>({role:m.from===phone?'user':'assistant',content:m.body})));

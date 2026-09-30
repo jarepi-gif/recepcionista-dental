@@ -8,7 +8,7 @@ const { installInbox } = require('./inbox');
 const { appendMessage } = require('./conversation-history');
 const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
-const { resolveCommercialAlertEvent, sendCommercialAlert } = require('./commercial-alerts');
+const { resolveCommercialAlertEvent, sendCommercialAlert, inboundInterestEvent, inboundTreatment } = require('./commercial-alerts');
 const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, isFullName, cleanNameHistory } = require('./aura-cro-policy');
 const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
@@ -43,8 +43,13 @@ async function handleWhatsApp(req, res) {
     if (!inbox.validate(req)) return res.sendStatus(403);
     try {
       const conversation = await inbox.store.inbound(req.body);
+      inbox.notifyInbound(req.body).catch(error=>console.error('Error de aviso al celular:',error.code||error.status||'error'));
       if (conversation.nameVerified && isFullName(conversation.name)) patientFullNames.set(req.body.From, conversation.name);
-      if (conversation.mode === 'human') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
+      if (conversation.mode === 'human') {
+        try { await inbox.alertInbound(req.body,{event:'HUMAN_HANDOFF_REQUIRED',patient:conversation.name}); }
+        catch(error){console.error('Error de alerta durante atención humana:',error.code||error.status||'error');}
+        return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
+      }
     } catch (error) {
       console.error('Inbox inbound unavailable:', error.code || error.status);
       return res.sendStatus(503);
@@ -139,11 +144,11 @@ try {
 // that has not yet advanced, then deliver it as soon as the name is available.
 const informationRequest = isInformationRequest(mensaje);
 if (informationRequest) pendingCommercialAlerts.delete(numero);
-const detectedAlertEvent = informationRequest ? null : resolveCommercialAlertEvent(
+const detectedAlertEvent = inboundInterestEvent(mensaje) || (informationRequest ? null : resolveCommercialAlertEvent(
   crmState,
   auraIntent,
   pendingCommercialAlerts.get(numero)
-);
+));
 if (detectedAlertEvent) pendingCommercialAlerts.set(numero, detectedAlertEvent);
 const alertEvent = pendingCommercialAlerts.get(numero);
 
@@ -153,13 +158,14 @@ const alertEvent = pendingCommercialAlerts.get(numero);
 // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
 if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
   try {
-    const alertMessage = await sendCommercialAlert({
+    const alertInput = {
       event: alertEvent,
       patient: verifiedFullName || patientDisplayName,
       patientPhone: numero,
-      treatment: 'Por confirmar',
+      treatment: inboundTreatment(mensaje),
       action: inbox.enabled ? `Ver conversación: ${process.env.INBOX_PUBLIC_URL}/bandeja?phone=${encodeURIComponent(numero)}` : 'Abrir XimGrowthOS para continuar'
-    });
+    };
+    const alertMessage = inbox.enabled ? await inbox.alertInbound(req.body,alertInput) : await sendCommercialAlert(alertInput);
     alertedMessageSids.add(req.body.MessageSid);
     pendingCommercialAlerts.delete(numero);
     console.log('Alerta comercial aceptada por Twilio:', alertMessage.sid, alertMessage.status || 'accepted');
@@ -179,7 +185,7 @@ if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.Messag
       return await replyAura(req, res, texto);
     }
 
-    if (suppliedFullName && !informationRequest && (wasAwaitingFullName || detectedAlertEvent)) {
+    if (suppliedFullName && !informationRequest && (wasAwaitingFullName || ['VALUATION_REQUESTED','INTENCION_DE_AGENDAR'].includes(detectedAlertEvent))) {
       const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Coordinaremos tu valoración aquí mismo. ¿Qué día y horario prefieres? Nuestro equipo te confirmará la disponibilidad por este chat.`;
       historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
       return await replyAura(req, res, texto);
@@ -345,6 +351,7 @@ app.get('/health', (req, res) => {
     inboxVersion: '1.0.0',
     nameDetectionVersion: '2.1.0',
     schedulingChannel: 'official-whatsapp',
+    alertsVersion: 'interest-and-web-push-v1',
     attributionParser: 'thera-reference-v1',
     ximgrowthosConfigured: Boolean(
       process.env.XIMGROWTHOS_INBOUND_URL && process.env.AURA_WEBHOOK_SECRET

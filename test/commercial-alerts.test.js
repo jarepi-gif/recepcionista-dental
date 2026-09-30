@@ -1,8 +1,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { alertConfig, alertEventFor, resolveCommercialAlertEvent, patientContactDetails, sendCommercialAlert } = require('../commercial-alerts');
+const { alertConfig, alertEventFor, resolveCommercialAlertEvent, patientContactDetails, sendCommercialAlert,inboundInterestEvent,inboundTreatment } = require('../commercial-alerts');
 
 const env = { TWILIO_ACCOUNT_SID:'ACtest', TWILIO_AUTH_TOKEN:'secret', TWILIO_WHATSAPP_NUMBER:'+5210000000000', THERA_ALERT_RECIPIENT:'+5256000000000', THERA_ALERT_CONTENT_SID:'HXtest' };
+
+test('informational treatment inquiries alert independently from scheduling and name detection',()=>{
+  const {extractPatientFullName,classifyAuraIntent}=require('../aura-cro-policy');
+  for(const message of ['Hola quiero informacion sobre implante','Me interesa un implante dental','JR Hola quiero mas informacion']) {
+    assert.equal(inboundInterestEvent(message),'LEAD_INTEREST');assert.equal(extractPatientFullName(message,true),null);assert.equal(classifyAuraIntent(message),'INFORMACION_GENERAL');
+  }
+  assert.equal(inboundTreatment('Hola quiero informacion sobre implante'),'Implantes dentales');
+  assert.equal(inboundInterestEvent('Gracias'),null);assert.equal(inboundInterestEvent('María López'),null);
+  assert.equal(inboundInterestEvent('Quiero agendar una valoración'),null);
+});
 
 test('maps commercial states without alerting normal conversations', () => {
   assert.equal(alertEventFor({patientState:'NORMAL'}), null);
