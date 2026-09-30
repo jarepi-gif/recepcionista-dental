@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { PATIENT_NAME_FALLBACK, classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat } = require('../aura-cro-policy');
+const { PATIENT_NAME_FALLBACK, classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, cleanNameHistory } = require('../aura-cro-policy');
 
 test('A: intención explícita recibe avance breve', () => {
   const message = 'Quiero agendar una valoración.';
@@ -60,9 +60,14 @@ test('G: obtiene el nombre completo declarado por el paciente', () => {
 });
 
 test('H: consultas y saludos no se registran como nombre completo', () => {
-  for (const text of ['JR Hola quiero mas informacion', 'Hola quiero más información', 'Quiero agendar una cita', 'Buenas tardes', 'Me interesan las carillas', 'Mucho gusto', 'Soy nuevo quiero informacion']) {
+  for (const text of ['JR Hola quiero mas informacion', 'Hola quiero más información', 'Me interesa un implante dental', 'Implante dental', 'Quiero agendar una cita', 'Buenas tardes', 'Me interesan las carillas', 'Mucho gusto', 'Soy nuevo quiero informacion']) {
     assert.equal(extractPatientFullName(text,true),null,text);
   }
+});
+
+test('K: un nombre falso de respuestas anteriores no contamina el contexto de Aura',()=>{
+  const history=[{role:'user',content:'Me interesa un implante dental'},{role:'assistant',content:'Gracias, Me interesa un implante dental. Registré tu nombre y tu solicitud.'},{role:'assistant',content:'Gracias, María López. Registré tu nombre y tu solicitud.'}];
+  const clean=cleanNameHistory(history);assert.equal(clean.length,2);assert.equal(clean[0],history[0]);assert.equal(clean[1],history[2]);
 });
 
 test('I: intención informativa actual no se confunde con agenda histórica', () => {

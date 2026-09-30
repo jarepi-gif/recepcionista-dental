@@ -26,8 +26,20 @@ function isFullName(value) {
   const text = String(value || '').trim();
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 6 || text.length > 120) return false;
-  if (/\b(?:hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carillas|implantes|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text))) return false;
+  if (containsConversationWords(text)) return false;
   return words.every((word) => /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]{2,}$/.test(word));
+}
+
+function containsConversationWords(text) {
+  return /\b(?:hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carilla|carillas|implante|implantes|dental|dentales|blanqueamiento|ortodoncia|limpieza|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text));
+}
+
+function cleanNameHistory(history) {
+  return history.filter(message=>{
+    if(message.role!=='assistant')return true;
+    const name=String(message.content||'').match(/^Gracias,\s*(.*?)\.\s*Registr[eé] tu nombre/iu)?.[1];
+    return !name || isFullName(name);
+  });
 }
 
 function isInformationRequest(message) {
@@ -100,5 +112,7 @@ module.exports = {
   isFullName,
   isInformationRequest,
   keepOfficialChat,
+  containsConversationWords,
+  cleanNameHistory,
   resolvePatientDisplayName
 };

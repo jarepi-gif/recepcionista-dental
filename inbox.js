@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const twilio = require('twilio');
-const {isFullName,isInformationRequest}=require('./aura-cro-policy');
+const {isFullName,containsConversationWords,cleanNameHistory}=require('./aura-cro-policy');
 
 const PREFIX = 'thera-inbox-';
 const WINDOW = 24 * 60 * 60 * 1000;
@@ -99,7 +99,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
   app.post('/api/inbox/alert-template',route(async(req,res)=>{res.json(await require('./inbox-alert-template').prepareTemplate(client));}));
   app.post('/api/inbox/repair-names',route(async(req,res)=>{
     let repaired=0;for(const conversation of await store.list()) {
-      if(isInformationRequest(conversation.name)) {
+      if(conversation.name!=='Nombre por confirmar' && containsConversationWords(conversation.name)) {
         await store.mutate(conversation.phone,data=>({...data,name:'Nombre por confirmar',nameVerified:false}));repaired++;
       }
     }
@@ -153,7 +153,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     enabled:true,store,
     async context(phone, currentSid) {
       const rows=await Promise.all([client.messages.list({from:phone,to:from,limit:14}),client.messages.list({from,to:phone,limit:14})]);
-      const history=rows.flat().filter(m=>m.sid!==currentSid && m.body && !['failed','undelivered'].includes(m.status)).sort((a,b)=>a.dateCreated-b.dateCreated).slice(-14).map(m=>({role:m.from===phone?'user':'assistant',content:m.body}));
+      const history=cleanNameHistory(rows.flat().filter(m=>m.sid!==currentSid && m.body && !['failed','undelivered'].includes(m.status)).sort((a,b)=>a.dateCreated-b.dateCreated).slice(-14).map(m=>({role:m.from===phone?'user':'assistant',content:m.body})));
       while(history.length && history[0].role!=='user') history.shift();
       return history;
     },

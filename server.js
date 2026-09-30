@@ -9,7 +9,7 @@ const { appendMessage } = require('./conversation-history');
 const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { resolveCommercialAlertEvent, sendCommercialAlert } = require('./commercial-alerts');
-const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat } = require('./aura-cro-policy');
+const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, isFullName } = require('./aura-cro-policy');
 const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
 const app = express();
@@ -43,6 +43,7 @@ app.post('/whatsapp', async (req, res) => {
     if (!inbox.validate(req)) return res.sendStatus(403);
     try {
       const conversation = await inbox.store.inbound(req.body);
+      if (conversation.nameVerified && isFullName(conversation.name)) patientFullNames.set(req.body.From, conversation.name);
       if (conversation.mode === 'human') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
     } catch (error) {
       console.error('Inbox inbound unavailable:', error.code || error.status);
@@ -190,6 +191,8 @@ if (alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 888,
     system: `Eres Aura, parte del equipo de atención de Thera Dental Clinic.
+
+Nombre completo confirmado del paciente: ${verifiedFullName || 'No confirmado; no interpretes saludos ni consultas como nombres y no reutilices nombres erróneos de mensajes anteriores.'}
 
 ${patientStateInstruction(crmState)}
 
