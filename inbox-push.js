@@ -34,7 +34,7 @@ function createPushService(client,origin,pushOverride) {
     return {devices:devices.length,accepted:results.filter(r=>r.status==='fulfilled').length,failed:results.filter(r=>r.status==='rejected').length};
   }
   async function notifyInbound(body) {
-    const eventId=String(body.MessageSid||'');if(!/^SM[a-fA-F0-9]{32}$/.test(eventId))return {skipped:true};
+    const eventId=String(body.MessageSid||'');if(!/^[SM]M[a-fA-F0-9]{32}$/.test(eventId))return {skipped:true};
     const claim='thera-push-event-'+eventId;
     try{await documents.create({uniqueName:claim,data:{state:'pending'},ttl:172800});}catch(e){if(e.status!==409)throw e;return {duplicate:true};}
     const result=await send({title:'Nuevo mensaje en Thera',body:'Abre la conversación para atender al paciente.',eventId,url:origin+'/bandeja?phone='+encodeURIComponent(body.From)});

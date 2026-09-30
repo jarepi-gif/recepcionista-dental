@@ -51,7 +51,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
   const store=new InboxStore(client);
   const push=require('./inbox-push').createPushService(client,origin);
   async function alertInbound(body,input={}) {
-    if(!/^SM[a-fA-F0-9]{32}$/.test(String(body.MessageSid||'')))throw new Error('Identificador inválido de mensaje');
+    if(!/^[SM]M[a-fA-F0-9]{32}$/.test(String(body.MessageSid||'')))throw new Error('Identificador inválido de mensaje');
     const documents=store.documents,claim='thera-alert-event-'+body.MessageSid;
     try{await documents.create({uniqueName:claim,data:{state:'pending',phone:body.From},ttl:172800});}
     catch(e){if(e.status!==409)throw e;return {...(await documents(claim).fetch()).data,duplicate:true};}
@@ -111,7 +111,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     const data=(await store.ensure(phone)).data;res.json(await alertInbound({From:phone,Body:latest.body,MessageSid:latest.sid,ProfileName:data.name}));
   }));
   app.get('/api/inbox/alerts/status',route(async(req,res)=>{
-    const sid=String(req.query.sid||'');if(!/^SM[a-fA-F0-9]{32}$/.test(sid))return res.sendStatus(400);
+    const sid=String(req.query.sid||'');if(!/^[SM]M[a-fA-F0-9]{32}$/.test(sid))return res.sendStatus(400);
     const message=await client.messages(sid).fetch();const recipient=phoneNumber(env.THERA_ALERT_RECIPIENT);
     const canonical=value=>String(value).replace(/\D/g,'').replace(/^521(?=\d{10}$)/,'52');
     if(canonical(message.to)!==canonical(recipient))return res.sendStatus(403);res.json({sid:message.sid,status:message.status,errorCode:message.errorCode,errorMessage:message.errorMessage});
@@ -144,7 +144,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
   }));
   app.get('/api/inbox/media',route(async(req,res)=>{
     const sid=String(req.query.sid||'');const index=Number(req.query.index||0);
-    if(!/^SM[a-fA-F0-9]{32}$/.test(sid)||!Number.isInteger(index)||index<0||index>9)return res.sendStatus(400);
+    if(!/^[SM]M[a-fA-F0-9]{32}$/.test(sid)||!Number.isInteger(index)||index<0||index>9)return res.sendStatus(400);
     const message=await client.messages(sid).fetch();
     if(message.from!==from&&message.to!==from)return res.sendStatus(403);
     const media=await client.messages(sid).media.list({limit:10});if(!media[index])return res.sendStatus(404);

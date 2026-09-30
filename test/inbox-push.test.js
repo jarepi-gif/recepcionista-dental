@@ -16,6 +16,7 @@ test('registered devices receive only one push per inbound message with a privat
  const service=createPushService(f.client,'https://example.com',push);await service.subscribe(subscription);
  const body={MessageSid:'SM'+'a'.repeat(32),From:'whatsapp:+525500000001',Body:'Mensaje sensible'};
  assert.equal((await service.notifyInbound(body)).accepted,1);assert.equal((await service.notifyInbound(body)).duplicate,true);assert.equal(delivered,1);
+ assert.equal((await service.notifyInbound({...body,MessageSid:'MM'+'b'.repeat(32)})).accepted,1);assert.equal(delivered,2);
  assert.match(payload.url,/\/bandeja\?phone=/);assert.doesNotMatch(payload.body,/Mensaje sensible/);
  const restored=createPushService(f.client,'https://example.com',push);assert.deepEqual(await restored.keys(),await service.keys());
 });
