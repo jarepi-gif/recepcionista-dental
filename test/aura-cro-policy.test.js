@@ -83,3 +83,17 @@ test('J: respuestas con el número personal se sustituyen por coordinación en c
   assert.doesNotMatch(response,/wa\.me|5664676808/);assert.match(response,/aquí mismo/);
   assert.equal(keepOfficialChat('Con gusto, coordinamos la cita por aquí.'),'Con gusto, coordinamos la cita por aquí.');
 });
+
+
+test('complete appointment submission preserves patient data and does not ask again',()=>{
+  const {suppliedAppointmentResponse}=require('../aura-cro-policy');
+  const message='Jaime Augusto Reyes Pinzon 5664676808 lunes 11 am';
+  const name=extractPatientFullName(message,true);
+  assert.equal(name,'Jaime Augusto Reyes Pinzon');
+  const response=suppliedAppointmentResponse(message,name);
+  assert.match(response,/lunes a las 11 a\. m\./);
+  assert.doesNotMatch(response,/compart|Qué día|horario prefieres|5664676808/);
+  assert.match(response,/verificará la disponibilidad/);
+  assert.equal(keepOfficialChat('Recibí tu teléfono 5664676808 y tu preferencia para el lunes.'),'Recibí tu teléfono 5664676808 y tu preferencia para el lunes.');
+  assert.equal(suppliedAppointmentResponse('Jaime Augusto Reyes Pinzon 5664676808 lunes',name),null);
+});

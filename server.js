@@ -26,6 +26,7 @@ const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+const { suppliedAppointmentResponse } = require('./aura-cro-policy');
 const inbox = installInbox(app);
 async function replyAura(req, res, text) {
   if (inbox.enabled && !req.auraDiagnostic) return inbox.respond(req, res, keepOfficialChat(text));
@@ -177,6 +178,12 @@ if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.Messag
 // El historial se limita por turnos para conservar contexto sin elevar el consumo.
     console.log('Mensaje recibido:', mensaje);
     console.log('De:', numero);
+
+    const receivedAppointment = suppliedAppointmentResponse(mensaje, verifiedFullName);
+    if (receivedAppointment) {
+      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', receivedAppointment);
+      return await replyAura(req, res, receivedAppointment);
+    }
 
     if (auraIntent === 'INTENCION_DE_AGENDAR' && !patientFullNames.has(numero)) {
       awaitingFullName.add(numero);

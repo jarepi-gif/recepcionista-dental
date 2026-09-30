@@ -54,6 +54,8 @@ function extractPatientFullName(message, acceptPlainName = false) {
     .trim();
   if (isFullName(introduced)) return introduced;
   if (acceptPlainName && isFullName(text)) return text;
+  const beforePhone = text.match(/^(.+?)\s+(?:\+?52\s*)?\d[\d\s.-]{8,}\d(?=\s|$)/)?.[1]?.trim();
+  if (acceptPlainName && isFullName(beforePhone)) return beforePhone;
   return null;
 }
 
@@ -89,9 +91,24 @@ function hotLeadResponse(message) {
   return `¡Claro! ¿Qué día y horario prefieres para tu valoración de Diseño de Sonrisa? ${confirmation}`;
 }
 
+
+function suppliedAppointmentResponse(message, name) {
+  if (!name) return null;
+  const text = normalize(message);
+  const day = text.match(/\b(hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/)?.[1];
+  if (!day) return null;
+  // Search after the day so a telephone number can never become the time.
+  const afterDay = text.slice(text.indexOf(day) + day.length);
+  const time = afterDay.match(/\b(\d{1,2}(?::\d{2})?)\s*(a\s*\.?\s*m\s*\.?|p\s*\.?\s*m\s*\.?)?\b/);
+  if (!time || Number(time[1].split(':')[0]) > 23) return null;
+  const readableDay = {manana:'mañana',miercoles:'miércoles',sabado:'sábado'}[day] || day;
+  const period = time[2] ? (/^p/.test(time[2]) ? ' p. m.' : ' a. m.') : '';
+  return `Gracias, ${name}. Recibí tus datos y tu preferencia: ${readableDay} a las ${time[1]}${period}. Nuestro equipo verificará la disponibilidad y te confirmará la cita por este mismo chat.`;
+}
+
 function keepOfficialChat(response) {
   const text = String(response || '');
-  if (/wa\.me\/52(?:1)?5664676808|(?:\+?52\s*)?(?:56[\s.-]*6467[\s.-]*6808)/i.test(text)) {
+  if (/wa\.me\/52(?:1)?5664676808/i.test(text) || (/(?:56[\s.-]*6467[\s.-]*6808)/.test(text) && /escr[ií]b|contacta|comun[ií]cate|whatsapp (?:personal|del dr)/i.test(text))) {
     return 'Podemos coordinar tu valoración aquí mismo. Compártenos tu nombre completo y el día y horario que prefieres; nuestro equipo te confirmará la disponibilidad por este chat.';
   }
   return text;
@@ -112,6 +129,7 @@ module.exports = {
   isFullName,
   isInformationRequest,
   keepOfficialChat,
+  suppliedAppointmentResponse,
   containsConversationWords,
   cleanNameHistory,
   resolvePatientDisplayName
