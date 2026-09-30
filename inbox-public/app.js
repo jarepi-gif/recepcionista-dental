@@ -1,5 +1,6 @@
 'use strict';
 const $=id=>document.getElementById(id);
+const linkedPhone=new URLSearchParams(location.search).get('phone');
 let conversations=[], selected=null, busy=false, loading=false, sending=false, requestId=null, draftPhone=null, lastFingerprint='', timer;
 function notice(message){$('notice').textContent=message;$('notice').hidden=false;clearTimeout(timer);timer=setTimeout(()=>$('notice').hidden=true,7000);}
 async function api(path,options={}){
@@ -28,7 +29,7 @@ async function refreshMessages(){
 }
 async function refresh(){if(loading||document.hidden||$('workspace').hidden)return;loading=true;try{const data=await api('conversations');conversations=data.conversations;renderPatients();await refreshMessages();$('connection').textContent='Actualizado '+new Date().toLocaleTimeString('es-MX');}catch(e){$('connection').textContent='Sin conexión · reintentando';notice(e.message);}finally{loading=false;}}
 $('search').oninput=renderPatients;
-$('login-form').onsubmit=async e=>{e.preventDefault();try{await post('session',{password:$('password').value});$('password').value='';$('login').hidden=true;$('workspace').hidden=false;await refresh();}catch(error){$('login-error').textContent=error.message;}};
+$('login-form').onsubmit=async e=>{e.preventDefault();try{await post('session',{password:$('password').value});$('password').value='';$('login').hidden=true;$('workspace').hidden=false;await refresh();if(linkedPhone)await openConversation(linkedPhone);}catch(error){$('login-error').textContent=error.message;}};
 $('logout').onclick=async()=>{try{await post('logout',{});selected=null;conversations=[];$('patients').replaceChildren();$('messages').replaceChildren();$('body').value='';$('workspace').hidden=true;$('login').hidden=false;}catch(e){notice(e.message);}};
 $('back').onclick=()=>document.body.classList.remove('chat-open');
 async function setMode(mode){if(busy||!selected)return;if(mode==='aura'&&!confirm('¿Devolver esta conversación a Aura? Responderá automáticamente al próximo mensaje del paciente.'))return;busy=true;$('take').disabled=true;$('resume').disabled=true;try{await post('mode',{phone:selected,mode});await refreshMessages();await refresh();}catch(e){notice(e.message);}finally{busy=false;$('take').disabled=false;$('resume').disabled=false;}}
@@ -36,4 +37,4 @@ $('take').onclick=()=>setMode('human');$('resume').onclick=()=>setMode('aura');
 $('body').oninput=()=>{requestId=null;};
 $('reply').onsubmit=async e=>{e.preventDefault();if(sending||!selected||!$('body').value.trim())return;sending=true;$('send').disabled=true;$('body').disabled=true;requestId=requestId||crypto.randomUUID();const phone=selected;try{const result=await post('send',{phone,body:$('body').value,requestId});$('body').value='';requestId=null;notice('Twilio aceptó el mensaje. Estado: '+result.status);await refreshMessages();}catch(error){notice(error.message);}finally{sending=false;await refreshMessages().catch(()=>{});}};
 $('recover').onclick=async()=>{if(busy)return;busy=true;$('recover').disabled=true;try{const data=await post('recover',{});notice('Se recuperaron '+data.recovered+' conversaciones recientes.');await refresh();}catch(e){notice(e.message);}finally{busy=false;$('recover').disabled=false;}};
-(async()=>{try{const access=new URLSearchParams(location.hash.slice(1)).get('access');if(access){history.replaceState(null,'','/bandeja');await post('session',{password:access});}await api('conversations');$('workspace').hidden=false;await refresh();}catch{$('login').hidden=false;}setInterval(refresh,10000);})();
+(async()=>{try{const access=new URLSearchParams(location.hash.slice(1)).get('access');if(access){history.replaceState(null,'','/bandeja'+location.search);await post('session',{password:access});}await api('conversations');$('workspace').hidden=false;await refresh();if(linkedPhone)await openConversation(linkedPhone);}catch{$('login').hidden=false;}setInterval(refresh,10000);})();

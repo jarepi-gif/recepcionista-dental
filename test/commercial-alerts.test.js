@@ -46,3 +46,22 @@ test('formats the patient name and WhatsApp number for the commercial alert', ()
 test('fails closed when alert configuration is incomplete', () => {
   assert.throws(()=>alertConfig({}),/not configured/);
 });
+
+test('approved inbox template preserves doctor recipient and patient-specific conversation link',async()=>{
+  let payload;
+  const client={
+    sync:{v1:{services:()=>({documents:()=>({fetch:async()=>({data:{sid:'HXinbox'}})})})}},
+    content:{v1:{contents:()=>({approvalFetch:()=>({fetch:async()=>({whatsapp:{status:'approved'}})})})}},
+    messages:{create:async value=>(payload=value,{sid:'SMtest'})}
+  };
+  const link='https://recepcionista-dental.onrender.com/bandeja?phone=whatsapp%3A%2B525500000000';
+  await sendCommercialAlert({event:'VALUATION_REQUESTED',patient:'Nombre por confirmar',patientPhone:'+525500000000',action:link},{env:{...env,INBOX_ENABLED:'true'},client});
+  assert.equal(payload.to,'whatsapp:+5256000000000');assert.equal(payload.contentSid,'HXinbox');assert.equal(JSON.parse(payload.contentVariables)['4'],link);
+});
+
+test('pending inbox approval keeps the existing approved alert operational',async()=>{
+  let payload;
+  const client={sync:{v1:{services:()=>({documents:()=>({fetch:async()=>({data:{sid:'HXpending'}})})})}},content:{v1:{contents:()=>({approvalFetch:()=>({fetch:async()=>({whatsapp:{status:'pending'}})})})}},messages:{create:async value=>(payload=value,{sid:'SMtest'})}};
+  await sendCommercialAlert({event:'VALUATION_REQUESTED',patientPhone:'+525500000000',action:'https://recepcionista-dental.onrender.com/bandeja?phone=patient'},{env:{...env,INBOX_ENABLED:'true'},client});
+  assert.equal(payload.contentSid,'HXtest');assert.match(JSON.parse(payload.contentVariables)['4'],/bandeja/);
+});

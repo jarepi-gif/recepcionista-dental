@@ -6,11 +6,10 @@ const twilio = require('twilio');
 const fs = require('fs');
 const { installInbox } = require('./inbox');
 const { appendMessage } = require('./conversation-history');
-const { addTreatmentToTransferLink } = require('./transfer-link');
 const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { resolveCommercialAlertEvent, sendCommercialAlert } = require('./commercial-alerts');
-const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('./aura-cro-policy');
+const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat } = require('./aura-cro-policy');
 const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
 const app = express();
@@ -29,9 +28,9 @@ app.use(express.json());
 
 const inbox = installInbox(app);
 async function replyAura(req, res, text) {
-  if (inbox.enabled) return inbox.respond(req, res, text);
+  if (inbox.enabled) return inbox.respond(req, res, keepOfficialChat(text));
   const response = new twilio.twiml.MessagingResponse();
-  response.message(text);
+  response.message(keepOfficialChat(text));
   return res.type('text/xml').send(response.toString());
 }
 
@@ -61,7 +60,7 @@ app.post('/whatsapp', async (req, res) => {
     const suppliedFullName = extractPatientFullName(mensaje, true);
     if (suppliedFullName) {
       patientFullNames.set(numero, suppliedFullName);
-      if (inbox.enabled) await inbox.store.mutate(numero, data => ({ ...data, name: suppliedFullName }));
+      if (inbox.enabled) await inbox.store.mutate(numero, data => ({ ...data, name: suppliedFullName, nameVerified: true }));
       awaitingFullName.delete(numero);
     }
     const verifiedFullName = suppliedFullName || patientFullNames.get(numero);
@@ -133,7 +132,9 @@ try {
 // Aura's own intent classification is an independent commercial signal. Keep
 // the alert pending even if Xim is temporarily unavailable or returns a state
 // that has not yet advanced, then deliver it as soon as the name is available.
-const detectedAlertEvent = resolveCommercialAlertEvent(
+const informationRequest = isInformationRequest(mensaje);
+if (informationRequest) pendingCommercialAlerts.delete(numero);
+const detectedAlertEvent = informationRequest ? null : resolveCommercialAlertEvent(
   crmState,
   auraIntent,
   pendingCommercialAlerts.get(numero)
@@ -145,14 +146,14 @@ const alertEvent = pendingCommercialAlerts.get(numero);
 // previously persisted webhook. The commercial handoff must still be
 // delivered unless this running Aura process already sent it for the same
 // Twilio MessageSid. Await Twilio so acceptance/failure is observable.
-if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSid)) {
+if (alertEvent && !alertedMessageSids.has(req.body.MessageSid)) {
   try {
     const alertMessage = await sendCommercialAlert({
       event: alertEvent,
-      patient: verifiedFullName,
+      patient: verifiedFullName || patientDisplayName,
       patientPhone: numero,
       treatment: 'Por confirmar',
-      action: inbox.enabled ? `Ver conversación: ${process.env.INBOX_PUBLIC_URL}/bandeja` : 'Abrir XimGrowthOS para continuar'
+      action: inbox.enabled ? `Ver conversación: ${process.env.INBOX_PUBLIC_URL}/bandeja?phone=${encodeURIComponent(numero)}` : 'Abrir XimGrowthOS para continuar'
     });
     alertedMessageSids.add(req.body.MessageSid);
     pendingCommercialAlerts.delete(numero);
@@ -173,8 +174,8 @@ if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSi
       return await replyAura(req, res, texto);
     }
 
-    if (suppliedFullName && (wasAwaitingFullName || detectedAlertEvent)) {
-      const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Para confirmar disponibilidad y horario con el Dr. Jaime Reyes, escríbele aquí: https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.`;
+    if (suppliedFullName && !informationRequest && (wasAwaitingFullName || detectedAlertEvent)) {
+      const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Coordinaremos tu valoración aquí mismo. ¿Qué día y horario prefieres? Nuestro equipo te confirmará la disponibilidad por este chat.`;
       historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
       return await replyAura(req, res, texto);
     }
@@ -271,30 +272,11 @@ Evita sonar insistente. No presiones al paciente. Guíalo con seguridad hacia la
 
 REGLA PRIORITARIA PARA AGENDAR CITAS:
 
-Mientras no exista integración activa con Dentalink, Aura no debe capturar ni confirmar citas directamente.
+La cita se coordina por este mismo WhatsApp oficial. No redirijas al paciente al WhatsApp personal del Dr. Jaime ni a otro número. No incluyas enlaces para abandonar esta conversación, aunque aparezcan en mensajes anteriores.
 
-Cuando el paciente muestre intención clara de agendar una cita, consultar disponibilidad, apartar horario, reservar, confirmar una valoración, preguntar “¿cuándo puedo ir?”, “¿tienen espacio?”, “quiero cita”, “quiero valoración” o cualquier frase similar, debes compartir obligatoriamente el enlace del WhatsApp del Dr. Jaime en esa misma respuesta.
+Captura la solicitud, nombre completo, tratamiento de interés y preferencia de día y horario. Si el paciente ya compartió un dato, no lo vuelvas a preguntar. El equipo atiende la solicitud en esta misma conversación y confirma la cita después de verificar disponibilidad.
 
-No esperes a que el paciente proporcione datos para mandar el enlace.
-
-No inventes disponibilidad.
-No confirmes horarios.
-No confirmes citas.
-No menciones Dentalink ni digas que falta una integración.
-
-La confirmación de disponibilidad y horario se realiza directamente por WhatsApp con el Dr. Jaime.
-
-El enlace obligatorio para agendar es:
-https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.
-
-Cuando compartas el enlace, puedes decir de forma natural que para agilizar el proceso puede escribirle al Dr. Jaime mencionando su nombre, el tratamiento que le interesa y el día u horario que le gustaría.
-
-Ejemplo correcto:
-“Perfecto, con gusto podemos ayudarte a coordinar tu cita. Para confirmar disponibilidad y horario, lo más práctico es escribir directamente al WhatsApp del Dr. Jaime Reyes: https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.
-
-Para que puedan apoyarte más rápido, puedes mencionarle tu nombre, el tratamiento que te interesa y el día u horario que te gustaría.”
-
-No mandes al paciente al Dr. Jaime desde el primer mensaje si solo está pidiendo información general. Pero en cuanto muestre intención clara de agendar, avanzar, consultar disponibilidad o apartar una cita, comparte el enlace obligatoriamente.
+No inventes disponibilidad ni confirmes una cita por tu cuenta. No menciones Dentalink ni detalles de la plataforma. Cuando el paciente solicite una cita, explica brevemente que la coordinaremos aquí mismo y que el equipo confirmará el horario por este chat.
 
 INFORMACIÓN OFICIAL DE THERA DENTAL CLINIC:
 Utiliza la siguiente información como fuente principal para responder dudas sobre tratamientos, precios publicados, ubicación, servicios, preguntas frecuentes y contacto.
@@ -308,9 +290,7 @@ Responde siempre en español de forma natural y conversacional, como una persona
       messages: historialConversaciones[numero]
     });
 
-    const texto = isCommercialOutboundEligible(crmState)
-      ? addTreatmentToTransferLink(respuestaClaude.content[0].text, historialConversaciones[numero])
-      : respuestaClaude.content[0].text;
+    const texto = keepOfficialChat(respuestaClaude.content[0].text);
 
     historialConversaciones[numero] = appendMessage(
       historialConversaciones[numero],
@@ -337,6 +317,8 @@ app.get('/health', (req, res) => {
     status: 'ok',
     inboxEnabled: inbox.enabled,
     inboxVersion: '1.0.0',
+    nameDetectionVersion: '2.0.0',
+    schedulingChannel: 'official-whatsapp',
     attributionParser: 'thera-reference-v1',
     ximgrowthosConfigured: Boolean(
       process.env.XIMGROWTHOS_INBOUND_URL && process.env.AURA_WEBHOOK_SECRET

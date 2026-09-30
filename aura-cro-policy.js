@@ -23,8 +23,16 @@ const INVALID_PATIENT_NAMES = [
 const PATIENT_NAME_FALLBACK = 'Contacto de WhatsApp — nombre por confirmar';
 
 function isFullName(value) {
-  const words = String(value || '').trim().split(/\s+/).filter(Boolean);
-  return words.length >= 2 && words.every((word) => /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]{2,}$/.test(word));
+  const text = String(value || '').trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 6 || text.length > 120) return false;
+  if (/\b(?:hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carillas|implantes|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text))) return false;
+  return words.every((word) => /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]{2,}$/.test(word));
+}
+
+function isInformationRequest(message) {
+  return classifyAuraIntent(message) !== 'INTENCION_DE_AGENDAR'
+    && /\b(?:informacion|informes|precio|precios|costo|costos|opciones|incluye|consiste)\b/.test(normalize(message));
 }
 
 function extractPatientFullName(message, acceptPlainName = false) {
@@ -53,20 +61,28 @@ function hotLeadResponse(message) {
   const text = normalize(message);
   const day = text.match(/\b(hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/)?.[1];
   const time = text.match(/\b(?:a\s+las?\s+)?(\d{1,2}(?::\d{2})?)\s*(a\s*\.?\s*m\s*\.?|p\s*\.?\s*m\s*\.?)?/);
-  const transferUrl = 'https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.';
+  const confirmation = 'Coordinaremos tu cita aquí mismo. Nuestro equipo confirmará la disponibilidad por este chat.';
 
   if (day && time) {
     const requestedDay = day === 'manana' ? 'mañana' : day === 'miercoles' ? 'miércoles' : day === 'sabado' ? 'sábado' : day;
     const period = time[2] ? (/^p/.test(time[2]) ? 'p. m.' : 'a. m.') : '';
     const requestedTime = `${time[1]}${period ? ` ${period}` : ''}`;
-    return `Gracias. Registré tu preferencia para el ${requestedDay} a las ${requestedTime}. Para confirmar disponibilidad con el Dr. Jaime Reyes, escríbele aquí: ${transferUrl}`;
+    return `Gracias. Registré tu preferencia para el ${requestedDay} a las ${requestedTime}. ${confirmation}`;
   }
   if (day) {
     const requestedDay = day === 'manana' ? 'mañana' : day === 'miercoles' ? 'miércoles' : day === 'sabado' ? 'sábado' : day;
     const dayPhrase = requestedDay === 'mañana' ? 'mañana' : `el ${requestedDay}`;
-    return `Gracias. ¿Qué horario prefieres ${dayPhrase}? Para confirmar disponibilidad con el Dr. Jaime Reyes también puedes escribirle aquí: ${transferUrl}`;
+    return `Gracias. ¿Qué horario prefieres ${dayPhrase}? ${confirmation}`;
   }
-  return `¡Claro! ¿Qué día y horario prefieres para tu valoración de Diseño de Sonrisa? Para confirmar disponibilidad con el Dr. Jaime Reyes también puedes escribirle aquí: ${transferUrl}`;
+  return `¡Claro! ¿Qué día y horario prefieres para tu valoración de Diseño de Sonrisa? ${confirmation}`;
+}
+
+function keepOfficialChat(response) {
+  const text = String(response || '');
+  if (/wa\.me\/52(?:1)?5664676808|(?:\+?52\s*)?(?:56[\s.-]*6467[\s.-]*6808)/i.test(text)) {
+    return 'Podemos coordinar tu valoración aquí mismo. Compártenos tu nombre completo y el día y horario que prefieres; nuestro equipo te confirmará la disponibilidad por este chat.';
+  }
+  return text;
 }
 
 function resolvePatientDisplayName(displayName) {
@@ -82,5 +98,7 @@ module.exports = {
   extractPatientFullName,
   hotLeadResponse,
   isFullName,
+  isInformationRequest,
+  keepOfficialChat,
   resolvePatientDisplayName
 };

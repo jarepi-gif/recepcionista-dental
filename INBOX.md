@@ -21,6 +21,8 @@ El modo humano impide las respuestas de Aura al webhook. No controla envíos ext
 
 La respuesta manual requiere un mensaje entrante dentro de las últimas 24 horas. No incluye creación o envío de plantillas. Las claves de idempotencia bloquean reintentos de un mismo envío durante 48 horas, incluso si la respuesta del proveedor fue incierta. Antes de reescribir un envío fallido se debe consultar el historial.
 
+La coordinación de citas permanece en el chat oficial; el equipo humano confirma disponibilidad desde la bandeja. Aura no envía al paciente al número personal del doctor. Las alertas comerciales siguen usando el destinatario interno configurado; incluyen `?phone=` para abrir el hilo específico. El endpoint administrativo de plantillas permite solicitar una plantilla de alertas sin la frase fija de Xim; se selecciona sólo después de aprobación. Durante la revisión se conserva la plantilla aprobada anterior para no interrumpir las alertas. La reparación administrativa de nombres sustituye frases informativas mal clasificadas por “Nombre por confirmar”, sin modificar el historial de mensajes.
+
 Actualiza cada 10 segundos mientras la pestaña está visible. Archivos disponibles se descargan desde un proxy autenticado. Acceso con cookie HttpOnly, Secure, SameSite=Strict; duración 12 horas. El fragmento `#access=` permite iniciar sesión con un enlace privado y se borra inmediatamente del historial del navegador. No compartir el enlace de acceso.
 
 ## Recuperación

@@ -1,4 +1,5 @@
 const twilio = require('twilio');
+const {templateStatus}=require('./inbox-alert-template');
 
 const ALERTABLE_STATES = new Set([
   'LEAD_HOT',
@@ -52,10 +53,17 @@ async function sendCommercialAlert(input, options = {}) {
   if (!ALERTABLE_STATES.has(input.event)) throw new Error('Unsupported commercial alert event');
   const config = alertConfig(options.env);
   const client = options.client || twilio(config.accountSid, config.authToken);
+  let contentSid=config.contentSid;
+  if ((options.env || process.env).INBOX_ENABLED==='true') {
+    try {
+      const template=await templateStatus(client);
+      if(template.status==='approved')contentSid=template.sid;
+    }catch(error){console.error('Inbox alert template unavailable:',error.code||error.status||'error');}
+  }
   return client.messages.create({
     from: config.from,
     to: config.to,
-    contentSid: config.contentSid,
+    contentSid,
     contentVariables: JSON.stringify({
       1: patientContactDetails(input.patient, input.patientPhone),
       2: input.treatment || 'Por confirmar',

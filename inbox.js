@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const twilio = require('twilio');
+const {isFullName,isInformationRequest}=require('./aura-cro-policy');
 
 const PREFIX = 'thera-inbox-';
 const WINDOW = 24 * 60 * 60 * 1000;
@@ -34,7 +35,7 @@ class InboxStore {
   }
   async inbound(body) {
     const name=String(body.ProfileName || '').slice(0,120);
-    return this.mutate(body.From, data=>({...data,name:name || data.name,lastInbound:new Date().toISOString(),preview:String(body.Body || '[Archivo recibido]').slice(0,160)}));
+    return this.mutate(body.From, data=>({...data,name:data.nameVerified && isFullName(data.name)?data.name:name || data.name,lastInbound:new Date().toISOString(),preview:String(body.Body || '[Archivo recibido]').slice(0,160)}));
   }
   async mode(phone) { return (await this.ensure(phone)).data.mode; }
   async list() { return (await this.documents.list({limit:1000})).filter(d=>d.uniqueName?.startsWith(PREFIX)).map(d=>d.data).sort((a,b)=>String(b.lastInbound||'').localeCompare(String(a.lastInbound||''))); }
@@ -90,6 +91,20 @@ function installInbox(app, env=process.env, clientOverride=null) {
   app.use('/api/inbox',auth);
   app.post('/api/inbox/logout',(req,res)=>{res.set('Set-Cookie','thera_inbox=; HttpOnly; Secure; SameSite=Strict; Path=/api/inbox; Max-Age=0');res.json({ok:true});});
   app.get('/api/inbox/conversations',route(async(req,res)=>{res.json({conversations:await store.list()});}));
+  app.get('/api/inbox/alert-template',route(async(req,res)=>{
+    const result=await require('./inbox-alert-template').templateStatus(client);
+    const recipient=String(env.THERA_ALERT_RECIPIENT||'').replace(/\D/g,'').replace(/^521(?=\d{10}$)/,'52');
+    res.json({...result,recipientIsDoctor:recipient==='525664676808'});
+  }));
+  app.post('/api/inbox/alert-template',route(async(req,res)=>{res.json(await require('./inbox-alert-template').prepareTemplate(client));}));
+  app.post('/api/inbox/repair-names',route(async(req,res)=>{
+    let repaired=0;for(const conversation of await store.list()) {
+      if(isInformationRequest(conversation.name)) {
+        await store.mutate(conversation.phone,data=>({...data,name:'Nombre por confirmar',nameVerified:false}));repaired++;
+      }
+    }
+    res.json({ok:true,repaired});
+  }));
   app.post('/api/inbox/recover',route(async(req,res)=>{
     const recent=await client.messages.list({to:from,limit:200});
     const patients=new Map();for(const message of recent) if(message.from?.startsWith('whatsapp:') && !patients.has(message.from)) patients.set(message.from,message);

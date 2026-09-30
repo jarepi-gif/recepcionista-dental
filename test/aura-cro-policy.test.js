@@ -2,14 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { PATIENT_NAME_FALLBACK, classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName } = require('../aura-cro-policy');
+const { PATIENT_NAME_FALLBACK, classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat } = require('../aura-cro-policy');
 
 test('A: intención explícita recibe avance breve', () => {
   const message = 'Quiero agendar una valoración.';
   assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
   const response = hotLeadResponse(message);
   assert.match(response, /Qué día y horario prefieres/);
-  assert.match(response, /wa\.me\/525664676808/);
+  assert.doesNotMatch(response, /wa\.me|5664676808/);
+  assert.match(response, /aquí mismo/);
   assert.doesNotMatch(response, /\$1,500|incluye|escáner|radiografía/i);
 });
 
@@ -29,7 +30,8 @@ test('D: agenda mañana tiene prioridad y pide sólo horario', () => {
   const message = 'Quiero agendar mañana.';
   assert.equal(classifyAuraIntent(message), 'INTENCION_DE_AGENDAR');
   assert.match(hotLeadResponse(message), /Qué horario prefieres mañana/);
-  assert.match(hotLeadResponse(message), /wa\.me\/525664676808/);
+  assert.doesNotMatch(hotLeadResponse(message), /wa\.me|5664676808/);
+  assert.match(hotLeadResponse(message), /aquí mismo/);
 });
 
 test('E: día y hora se reconocen sin repetir una pregunta contestada', () => {
@@ -38,7 +40,8 @@ test('E: día y hora se reconocen sin repetir una pregunta contestada', () => {
   const response = hotLeadResponse(message);
   assert.match(response, /Registré tu preferencia para el jueves a las 4:00 p\. m\./);
   assert.doesNotMatch(response, /Qué día te gustaría/);
-  assert.match(response, /wa\.me\/525664676808/);
+  assert.doesNotMatch(response, /wa\.me|5664676808/);
+  assert.match(response, /aquí mismo/);
 });
 
 test('F: displayName interno usa fallback seguro', () => {
@@ -54,4 +57,24 @@ test('G: obtiene el nombre completo declarado por el paciente', () => {
   assert.equal(extractPatientFullName('María López', true), 'María López');
   assert.equal(extractPatientFullName('Jaime Augusto Reyes Pinzón', true), 'Jaime Augusto Reyes Pinzón');
   assert.equal(extractPatientFullName('Jaime', true), null);
+});
+
+test('H: consultas y saludos no se registran como nombre completo', () => {
+  for (const text of ['JR Hola quiero mas informacion', 'Hola quiero más información', 'Quiero agendar una cita', 'Buenas tardes', 'Me interesan las carillas', 'Mucho gusto', 'Soy nuevo quiero informacion']) {
+    assert.equal(extractPatientFullName(text,true),null,text);
+  }
+});
+
+test('I: intención informativa actual no se confunde con agenda histórica', () => {
+  assert.equal(isInformationRequest('JR Hola quiero mas informacion'),true);
+  assert.equal(isInformationRequest('Soy María López y quiero información'),true);
+  assert.equal(extractPatientFullName('Soy María López y quiero información',true),'María López');
+  assert.equal(isInformationRequest('Quiero información y agendar una valoración'),false);
+  assert.equal(isInformationRequest('María López'),false);
+});
+
+test('J: respuestas con el número personal se sustituyen por coordinación en chat oficial',()=>{
+  const response=keepOfficialChat('Escríbele aquí https://wa.me/525664676808?text=Hola');
+  assert.doesNotMatch(response,/wa\.me|5664676808/);assert.match(response,/aquí mismo/);
+  assert.equal(keepOfficialChat('Con gusto, coordinamos la cita por aquí.'),'Con gusto, coordinamos la cita por aquí.');
 });
