@@ -4,6 +4,7 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const twilio = require('twilio');
 const fs = require('fs');
+const { installInbox } = require('./inbox');
 const { appendMessage } = require('./conversation-history');
 const { addTreatmentToTransferLink } = require('./transfer-link');
 const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
@@ -26,11 +27,29 @@ const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+const inbox = installInbox(app);
+async function replyAura(req, res, text) {
+  if (inbox.enabled) return inbox.respond(req, res, text);
+  const response = new twilio.twiml.MessagingResponse();
+  response.message(text);
+  return res.type('text/xml').send(response.toString());
+}
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
 app.post('/whatsapp', async (req, res) => {
+  if (inbox.enabled) {
+    if (!inbox.validate(req)) return res.sendStatus(403);
+    try {
+      const conversation = await inbox.store.inbound(req.body);
+      if (conversation.mode === 'human') return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
+    } catch (error) {
+      console.error('Inbox inbound unavailable:', error.code || error.status);
+      return res.sendStatus(503);
+    }
+  }
   try {
     const mensaje = req.body.Body;
     const numero = req.body.From;
@@ -42,10 +61,14 @@ app.post('/whatsapp', async (req, res) => {
     const suppliedFullName = extractPatientFullName(mensaje, true);
     if (suppliedFullName) {
       patientFullNames.set(numero, suppliedFullName);
+      if (inbox.enabled) await inbox.store.mutate(numero, data => ({ ...data, name: suppliedFullName }));
       awaitingFullName.delete(numero);
     }
     const verifiedFullName = suppliedFullName || patientFullNames.get(numero);
 
+if (inbox.enabled) {
+  historialConversaciones[numero] = await inbox.context(numero, req.body.MessageSid);
+}
 if (!historialConversaciones[numero]) {
   historialConversaciones[numero] = [];
 }
@@ -129,7 +152,7 @@ if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSi
       patient: verifiedFullName,
       patientPhone: numero,
       treatment: 'Por confirmar',
-      action: 'Abrir XimGrowthOS para continuar'
+      action: inbox.enabled ? `Ver conversación: ${process.env.INBOX_PUBLIC_URL}/bandeja` : 'Abrir XimGrowthOS para continuar'
     });
     alertedMessageSids.add(req.body.MessageSid);
     pendingCommercialAlerts.delete(numero);
@@ -147,28 +170,19 @@ if (alertEvent && verifiedFullName && !alertedMessageSids.has(req.body.MessageSi
       awaitingFullName.add(numero);
       const texto = 'Con gusto te ayudamos a continuar con tu valoración. Para registrar correctamente tu solicitud, ¿me compartes tu nombre completo, por favor?';
       historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
-      const twiml = new twilio.twiml.MessagingResponse();
-      twiml.message(texto);
-      res.type('text/xml');
-      return res.send(twiml.toString());
+      return await replyAura(req, res, texto);
     }
 
     if (suppliedFullName && (wasAwaitingFullName || detectedAlertEvent)) {
       const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Para confirmar disponibilidad y horario con el Dr. Jaime Reyes, escríbele aquí: https://wa.me/525664676808?text=Hola%2C%20me%20gustar%C3%ADa%20agendar%20una%20cita%20en%20Thera%20Dental%20Clinic.`;
       historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
-      const twiml = new twilio.twiml.MessagingResponse();
-      twiml.message(texto);
-      res.type('text/xml');
-      return res.send(twiml.toString());
+      return await replyAura(req, res, texto);
     }
 
     if (auraIntent === 'INTENCION_DE_AGENDAR' && crmState.patientState !== 'APPOINTMENT_SCHEDULED' && !crmState.humanHandoffRequired) {
       const texto = hotLeadResponse(mensaje);
       historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
-      const twiml = new twilio.twiml.MessagingResponse();
-      twiml.message(texto);
-      res.type('text/xml');
-      return res.send(twiml.toString());
+      return await replyAura(req, res, texto);
     }
 
     const respuestaClaude = await anthropic.messages.create({
@@ -304,20 +318,13 @@ Responde siempre en español de forma natural y conversacional, como una persona
       texto
     );
 
-    const twiml = new twilio.twiml.MessagingResponse();
-    twiml.message(texto);
-
-    res.type('text/xml');
-    res.send(twiml.toString());
+    return await replyAura(req, res, texto);
 
   } catch (error) {
     console.error('Error con Claude:', error.message);
 
-    const twiml = new twilio.twiml.MessagingResponse();
-    twiml.message('Hola, soy Aura de Thera Dental Clinic. En un momento te apoyamos 🦷');
-
-    res.type('text/xml');
-    res.send(twiml.toString());
+    try { return await replyAura(req, res, 'Hola, soy Aura de Thera Dental Clinic. En un momento te apoyamos 🦷'); }
+    catch (replyError) { return res.sendStatus(503); }
   }
 });
 
@@ -328,6 +335,8 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
+    inboxEnabled: inbox.enabled,
+    inboxVersion: '1.0.0',
     attributionParser: 'thera-reference-v1',
     ximgrowthosConfigured: Boolean(
       process.env.XIMGROWTHOS_INBOUND_URL && process.env.AURA_WEBHOOK_SECRET
@@ -339,6 +348,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.listen(3000, () => {
+app.listen(process.env.PORT || 3000, () => {
   console.log('Servidor corriendo en puerto 3000');
 });
