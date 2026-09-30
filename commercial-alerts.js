@@ -14,8 +14,8 @@ function inboundInterestEvent(message) {
   const text=String(message||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   const {classifyAuraIntent}=require('./aura-cro-policy');
   if(classifyAuraIntent(message)==='INTENCION_DE_AGENDAR')return null;
-  return /\b(?:informacion|informes|precio|costo|cotizacion)\b/.test(text)
-    || (/\b(?:implante|implantes|carilla|carillas|sonrisa|ortodoncia|blanqueamiento|corona|coronas|limpieza|resina|resinas)\b/.test(text) && /\b(?:interesa|interesan|quiero|necesito|busco|quisiera)\b/.test(text))
+  return /\b(?:informacion|informes|precios?|costos?|cotizacion)\b/.test(text)
+    || (/\b(?:implante|implantes|carilla|carillas|sonrisa|ortodoncia|blanqueamiento|corona|coronas|limpieza|resina|resinas)\b/.test(text))
     ? 'LEAD_INTEREST' : null;
 }
 
@@ -25,6 +25,9 @@ function inboundTreatment(message) {
   if(/\b(?:carillas?|sonrisa)\b/.test(text))return 'Diseño de Sonrisa';
   if(/\bortodoncia\b/.test(text))return 'Ortodoncia';
   if(/\bblanqueamiento\b/.test(text))return 'Blanqueamiento';
+  if(/\bresinas?\b/.test(text))return 'Resinas estéticas';
+  if(/\bcoronas?\b/.test(text))return 'Coronas dentales';
+  if(/\blimpieza\b/.test(text))return 'Limpieza dental';
   return 'Por confirmar';
 }
 

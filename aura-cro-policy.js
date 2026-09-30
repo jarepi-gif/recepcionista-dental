@@ -31,7 +31,7 @@ function isFullName(value) {
 }
 
 function containsConversationWords(text) {
-  return /\b(?:hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carilla|carillas|implante|implantes|dental|dentales|blanqueamiento|ortodoncia|limpieza|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text));
+  return /\b(?:hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carilla|carillas|implante|implantes|dental|dentales|resina|resinas|estetica|esteticas|corona|coronas|rehabilitacion|blanqueamiento|ortodoncia|limpieza|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text));
 }
 
 function cleanNameHistory(history) {

@@ -6,10 +6,11 @@ const env = { TWILIO_ACCOUNT_SID:'ACtest', TWILIO_AUTH_TOKEN:'secret', TWILIO_WH
 
 test('informational treatment inquiries alert independently from scheduling and name detection',()=>{
   const {extractPatientFullName,classifyAuraIntent}=require('../aura-cro-policy');
-  for(const message of ['Hola quiero informacion sobre implante','Me interesa un implante dental','JR Hola quiero mas informacion']) {
+  for(const message of ['Hola quiero informacion sobre implante','Me interesa un implante dental','JR Hola quiero mas informacion','Resinas esteticas','Carillas','Coronas dentales','Costos']) {
     assert.equal(inboundInterestEvent(message),'LEAD_INTEREST');assert.equal(extractPatientFullName(message,true),null);assert.equal(classifyAuraIntent(message),'INFORMACION_GENERAL');
   }
   assert.equal(inboundTreatment('Hola quiero informacion sobre implante'),'Implantes dentales');
+  assert.equal(inboundTreatment('Resinas esteticas'),'Resinas estéticas');
   assert.equal(inboundInterestEvent('Gracias'),null);assert.equal(inboundInterestEvent('María López'),null);
   assert.equal(inboundInterestEvent('Quiero agendar una valoración'),null);
 });
