@@ -21,7 +21,7 @@ async function openConversation(phone){
 }
 async function refreshMessages(){
   const phone=selected;if(!phone)return;const data=await api('messages?phone='+encodeURIComponent(phone));if(phone!==selected)return;
-  const c=data.conversation;renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
+  const c=data.conversation;renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
   const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=!canSend;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Ventana de 24 horas cerrada. Para escribir se necesita una plantilla aprobada.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
   const fingerprint=JSON.stringify(data.messages);if(fingerprint===lastFingerprint)return;lastFingerprint=fingerprint;const box=$('messages');const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<100;const initial=!box.childNodes.length;box.replaceChildren();
   if(!data.messages.length){const p=document.createElement('p');p.textContent='No hay mensajes disponibles en Twilio para este paciente.';box.append(p);}
@@ -48,15 +48,28 @@ function renderCommercial(conversation){
  commercialPhone=phone;commercialDirty=false;
  $('contact-class').value=c.classification||'unverified';$('can-attend').value=c.canAttend||'unknown';$('commercial-owner').value=c.owner||'Dr. Jaime Reyes';$('commercial-need').value=c.need||'';$('source-note').value=c.sourceNote||'';$('loss-reason').value=c.lossReason||'';$('attendance').value=c.attendance||'unknown';$('treatment-accepted').checked=Boolean(c.treatmentAccepted);
  // These fields add evidence; do not silently submit old confirmations again.
- for(const id of ['followup-at','followup-evidence','appointment-at','appointment-evidence','payment-amount','payment-date','payment-reference'])$(id).value='';$('followup-done').checked=false;
+ for(const id of ['followup-at','followup-evidence','appointment-at','appointment-evidence','payment-amount','payment-date','payment-reference','whatsapp-consent'])$(id).value='';$('followup-done').checked=false;
 }
 $('commercial-form').addEventListener('input',()=>commercialDirty=true);
 $('commercial-form').onsubmit=async e=>{e.preventDefault();if(!selected)return;const phone=selected;$('save-commercial').disabled=true;
  try{const input={phone,classification:$('contact-class').value,canAttend:$('can-attend').value,owner:$('commercial-owner').value,need:$('commercial-need').value,sourceNote:$('source-note').value,lossReason:$('loss-reason').value,attendance:$('attendance').value,treatmentAccepted:$('treatment-accepted').checked,followUpDone:$('followup-done').checked};
+ if($('whatsapp-consent').value.trim())input.whatsappConsentEvidence=$('whatsapp-consent').value.trim();
  if($('followup-at').value){input.followUpDate=$('followup-at').value+':00-06:00';input.followUpEvidence=$('followup-evidence').value;}
  if($('appointment-at').value){input.appointmentAt=$('appointment-at').value+':00-06:00';input.appointmentEvidence=$('appointment-evidence').value;}
  if($('payment-amount').value)input.payment={amount:Number($('payment-amount').value),currency:'MXN',date:$('payment-date').value,reference:$('payment-reference').value};
- await post('commercial',input);commercialDirty=false;notice('Ficha guardada. No se enviaron mensajes.');await refreshMessages();await refresh();
+ await post('commercial',input);commercialDirty=false;notice(input.appointmentAt?'Cita registrada. Aura comunicará la confirmación si la ventana de WhatsApp está abierta.':'Ficha guardada.');await refreshMessages();await refresh();
  }catch(error){notice(error.message);}finally{$('save-commercial').disabled=false;}
 };
 $('commercial-summary').onclick=async()=>{try{const m=await api('commercial-summary');$('summary-results').hidden=false;$('summary-results').textContent='Prospectos clasificados: '+m.prospects+' · Meta verificado: '+m.verifiedMeta+' · Pueden acudir: '+m.canAttend+' · Solicitudes: '+m.requested+' · Citas confirmadas: '+m.confirmed+' · Asistieron: '+m.attended+' · Tratamientos aceptados: '+m.accepted+' · Cobros: $'+m.collectedMXN.toFixed(2)+' MXN · Excluidos: '+m.excluded+' · Por verificar: '+m.unverified+'. '+m.scope;}catch(error){notice(error.message);}};
+
+const recoveryLabels={queued:'Pendiente',sent:'Enviado; esperando respuesta',responded:'Respondió; continuar hasta confirmar agenda',confirmed:'Cita confirmada',excluded:'Excluido',human:'A cargo del responsable',uncertain:'Envío incierto; revisar',sending:'Procesando'};
+const blockedLabels={needs_consent:'Falta permiso registrado para seguimiento fuera de 24 horas',needs_template:'Falta plantilla aprobada de recuperación'};
+function renderRecoveryCase(c){const r=c.recovery;$('recovery-case-status').textContent=r?'Recuperación: '+(recoveryLabels[r.status]||r.status)+' · '+(blockedLabels[r.blockedReason]||r.blockedReason||'')+' · Responsable: '+(c.commercial?.owner||'Dr. Jaime Reyes'):'';}
+async function showRecovery(){const data=await api('recovery');const m=data.report;$('recovery-status').textContent=(data.settings.enabled?'Seguimiento automático activo':'Seguimiento automático pausado')+' · Plantilla: '+data.template.status;$('recovery-results').textContent='Inscritos: '+m.enrolled+' · Enviados: '+m.sent+' · Entregados/leídos: '+m.delivered+' · Respondieron: '+m.responded+' · Citas tras respuesta: '+m.confirmedAfterResponse+' · Asistencias: '+m.attended+' · Cobros registrados: $'+m.collectedMXN.toFixed(2)+' MXN\n'+m.cases.map(c=>c.name+' (…'+c.phoneLast4+') — '+(recoveryLabels[c.status]||c.status)+(c.blockedReason?' · '+(blockedLabels[c.blockedReason]||c.blockedReason):'')+' · '+c.owner).join('\n')+'\n'+m.scope;}
+async function recoveryAction(path,input={}){if(busy)return;busy=true;try{const result=await post('recovery/'+path,input);notice(result.notEnrolledReason||'Recuperación actualizada.');await showRecovery();await refresh();}catch(e){notice(e.message);}finally{busy=false;}}
+$('recovery-report').onclick=()=>showRecovery().catch(e=>notice(e.message));
+$('recovery-enable').onclick=()=>recoveryAction('settings',{enabled:true});
+$('recovery-pause').onclick=()=>recoveryAction('settings',{enabled:false});
+$('recovery-recent').onclick=()=>recoveryAction('recent');
+$('recovery-run').onclick=()=>recoveryAction('run');
+$('recovery-enroll').onclick=()=>selected&&recoveryAction('enroll',{phone:selected});

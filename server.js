@@ -198,6 +198,7 @@ if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.Messag
         if(current.updatedAt>attention.updatedAt){for(const key of ['classification','owner','canAttend','sourceNote','lossReason','followUp','handoff'])if(current[key]!==undefined)merged[key]=current[key];}
         attention=merged;return {...data, commercial:merged};
       });
+      if(inbox.enabled && !req.auraDiagnostic)try{await inbox.recovery.onInbound(numero);}catch(error){console.error('Seguimiento pendiente:',error.code||error.status||'error');}
     }
     await saveAttention();
     if (attention.handoff?.status === 'pending' && !req.auraDiagnostic && !alertedMessageSids.has(req.body.MessageSid)) {

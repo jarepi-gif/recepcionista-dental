@@ -52,9 +52,9 @@ function updateInbound(previous,body,history=[],now=new Date()){
  if(/\b(?:me (?:keda|queda) (?:muy )?(?:lejos|retirado)|no puedo (?:ir|acudir|trasladarme))\b/.test(n))c.canAttend='no';
  else if(/\b(?:si puedo (?:ir|acudir)|puedo acudir|puedo trasladarme)\b/.test(n)||(c.awaiting==='attendance'&&yes(text)))c.canAttend='yes';
  else if(c.awaiting==='attendance'&&no(text))c.canAttend='no';
- if(/\b(?:no me contacten|no quiero mensajes|dejen de escribirme)\b/.test(n)){c.doNotContact=true;c.followUp=c.followUp?{...c.followUp,status:'declined'}:null;}
+ if(/\b(?:no me contacten|no quiero mensajes|dejen de escribirme|no me escriban)\b/.test(n)||/^(?:stop|baja|cancelar seguimiento)$/.test(n)||(no(text)&&/no recibir seguimiento/i.test(last))){c.doNotContact=true;c.followUp=c.followUp?{...c.followUp,status:'declined'}:null;}
  if(c.followUp?.status==='proposed'){
-  if(yes(text)){c.followUp={...c.followUp,status:'agreed',agreedAt:now.toISOString(),evidenceSid:body.MessageSid};c.awaiting=null;}
+  if(yes(text)){c.followUp={...c.followUp,status:'agreed',agreedAt:now.toISOString(),evidenceSid:body.MessageSid};c.whatsappFollowupConsent={evidence:body.MessageSid,scope:'Seguimiento de la consulta por WhatsApp',grantedAt:now.toISOString()};c.awaiting=null;}
   else if(no(text)){c.followUp={...c.followUp,status:'declined'};c.awaiting=null;}
  }
  const priceQuestion=/\b(?:precio|costo|cuanto|incluye|anticipo|abono|descuenta)\b/.test(n);
@@ -107,6 +107,7 @@ function validateManual(previous,input,now=new Date()){
  const allowedClass=['unverified','prospect','test','supplier','duplicate'];if(input.classification!==undefined){if(!allowedClass.includes(input.classification))throw new Error('Clasificación inválida');c.classification=input.classification;}
  if(input.canAttend!==undefined){if(!['unknown','yes','no'].includes(input.canAttend))throw new Error('Asistencia posible inválida');c.canAttend=input.canAttend;}
  for(const key of ['owner','need','sourceNote','lossReason'])if(input[key]!==undefined){if(typeof input[key]!=='string'||input[key].length>1000)throw new Error('Dato inválido');c[key]=input[key].trim();}
+ if(input.whatsappConsentEvidence){if(typeof input.whatsappConsentEvidence!=='string'||input.whatsappConsentEvidence.length>1000)throw new Error('Evidencia de consentimiento inválida');c.whatsappFollowupConsent={evidence:input.whatsappConsentEvidence.trim(),scope:'Seguimiento de la consulta por WhatsApp',recordedAt:now.toISOString(),recordedBy:c.owner||OWNER};}
  if(input.followUpDate){if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00-06:00$/.test(input.followUpDate)||!Number.isFinite(Date.parse(input.followUpDate)))throw new Error('Fecha de seguimiento inválida');if(!String(input.followUpEvidence||'').trim())throw new Error('Indica el acuerdo del paciente');c.followUp={status:'agreed',dueAt:input.followUpDate,date:input.followUpDate.slice(0,10),owner:c.owner||OWNER,evidence:String(input.followUpEvidence).slice(0,1000),recordedAt:now.toISOString()};}
  if(input.followUpDone&&c.followUp)c.followUp={...c.followUp,status:'completed',completedAt:now.toISOString()};
  if(input.appointmentAt){if(!Number.isFinite(Date.parse(input.appointmentAt))||!String(input.appointmentEvidence||'').trim())throw new Error('Una cita confirmada requiere fecha y comprobación de agenda');c.appointment={...c.appointment,status:'confirmed',at:input.appointmentAt,evidence:String(input.appointmentEvidence).slice(0,1000),confirmedBy:c.owner||OWNER,confirmedAt:now.toISOString()};c.events.push({type:'appointment_confirmed',at:now.toISOString(),appointmentAt:input.appointmentAt});if(c.handoff)c.handoff={...c.handoff,status:'completed'};}

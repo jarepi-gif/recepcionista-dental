@@ -102,6 +102,12 @@ function installInbox(app, env=process.env, clientOverride=null) {
     failures.delete(ip);res.set('Set-Cookie',`thera_inbox=${signedCookie()}; HttpOnly; Secure; SameSite=Strict; Path=/api/inbox; Max-Age=43200`);res.json({ok:true});
   });
   app.use('/api/inbox',auth);
+  const recovery=require('./recovery').createRecovery({client,store,from,env,push,locked});
+  app.get('/api/inbox/recovery',route(async(req,res)=>{const settings=await recovery.settings();res.json({settings,template:await recovery.templateStatus(settings),report:await recovery.report(),message:recovery.BODY});}));
+  app.post('/api/inbox/recovery/settings',route(async(req,res)=>{try{res.json(await recovery.configure(req.body));}catch(e){if(!e.code&&!e.status)return res.status(400).json({error:e.message});throw e;}}));
+  app.post('/api/inbox/recovery/enroll',route(async(req,res)=>{res.json(await recovery.enroll(phoneNumber(req.body.phone),true));}));
+  app.post('/api/inbox/recovery/recent',route(async(req,res)=>{res.json(await recovery.enrollRecent());}));
+  app.post('/api/inbox/recovery/run',route(async(req,res)=>{await recovery.tick();res.json(await recovery.report());}));
   app.post('/api/inbox/logout',(req,res)=>{res.set('Set-Cookie','thera_inbox=; HttpOnly; Secure; SameSite=Strict; Path=/api/inbox; Max-Age=0');res.json({ok:true});});
   app.get('/api/inbox/commercial-summary',route(async(req,res)=>{res.json(workflow.metrics(await store.list()));}));
   app.post('/api/inbox/commercial',route(async(req,res)=>{
@@ -182,7 +188,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     });
   }));
   return {
-    enabled:true,store,alertInbound,notifyInbound:push.notifyInbound,
+    enabled:true,store,alertInbound,notifyInbound:push.notifyInbound,recovery,
     async context(phone, currentSid) {
       const rows=await Promise.all([client.messages.list({from:phone,to:from,limit:14}),client.messages.list({from,to:phone,limit:14})]);
       const history=cleanNameHistory(rows.flat().filter(m=>m.sid!==currentSid && m.body && !['failed','undelivered'].includes(m.status)).sort((a,b)=>a.dateCreated-b.dateCreated).slice(-14).map(m=>({role:m.from===phone?'user':'assistant',content:m.body})));
