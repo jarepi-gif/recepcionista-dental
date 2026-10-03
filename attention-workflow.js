@@ -32,11 +32,15 @@ function updateInbound(previous,body,history=[],now=new Date()){
  const c={...initial(),...previous,source:{...initial().source,...previous?.source},appointment:{status:'none',...previous?.appointment},events:[...(previous?.events||[])],payments:[...(previous?.payments||[])]};
  if(body.MessageSid&&c.lastInboundSid===body.MessageSid)return c;
  const text=String(body.Body||''),n=normalize(text),last=history.filter(x=>x.role==='assistant').at(-1)?.content||'';
- if(!previous){
+ if(!previous||!c.need||!c.teeth||!c.patientName){
+  const restoreNeed=!c.need,restoreTeeth=!c.teeth,restoreName=!c.patientName&&!c.thirdParty;
   for(const h of history.filter(x=>x.role==='user')){
-   const treatment=inboundTreatment(h.content);if(treatment!=='Por confirmar')c.need=treatment;
+   const treatment=inboundTreatment(h.content);if(restoreNeed&&treatment!=='Por confirmar')c.need=treatment;
+   // Restore only explicitly declared names, never a profile name or assistant text.
+   const historicalName=/\b(?:me llamo|mi nombre es|soy)\b/i.test(h.content)?extractPatientFullName(h.content,true):null;
+   if(restoreName&&historicalName&&isFullName(historicalName))c.patientName=historicalName;
    const count=normalize(h.content).match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|\d{1,2})\s+(?:dientes?|piezas?|muelas?|implantes?)\b/);
-   if(count)c.teeth=({un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9})[count[1]]||Number(count[1]);
+   if(count&&restoreTeeth)c.teeth=({un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9})[count[1]]||Number(count[1]);
   }
  }
  c.lastInboundSid=body.MessageSid;c.updatedAt=now.toISOString();
