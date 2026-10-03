@@ -31,7 +31,7 @@ function isFullName(value) {
 }
 
 function containsConversationWords(text) {
-  return /\b(?:hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carilla|carillas|implante|implantes|dental|dentales|resina|resinas|estetica|esteticas|corona|coronas|rehabilitacion|blanqueamiento|ortodoncia|limpieza|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text));
+  return /\b(?:donde|direccion|ubicacion|ubican|ubicados|encuentran|encuentra|queda|keda|lejos|retirado|dia|lunes|martes|miercoles|jueves|viernes|sabado|domingo|hola|buenos|buenas|gracias|gusto|quiero|quisiera|deseo|necesito|gustaria|informacion|informes|precio|costo|cuanto|agendar|cita|valoracion|consulta|interesa|interesan|carilla|carillas|implante|implantes|dental|dentales|resina|resinas|estetica|esteticas|corona|coronas|rehabilitacion|blanqueamiento|ortodoncia|limpieza|sonrisa|tratamiento|ayuda|soy|llamo|nombre|tengo|puedo|podria|como|favor|manana|horario|tarde|tardes|dias|noches)\b/.test(normalize(text));
 }
 
 function cleanNameHistory(history) {
@@ -52,7 +52,7 @@ function extractPatientFullName(message, acceptPlainName = false) {
   const introduced = text.match(/\b(?:soy|me llamo|mi nombre es)\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'-]+){1,5})/i)?.[1]
     ?.replace(/\s+(?:y|quiero|deseo|para)\s.*$/i, '')
     .trim();
-  if (isFullName(introduced)) return introduced;
+  if (introduced && !/^de\s/i.test(introduced) && isFullName(introduced)) return introduced;
   if (acceptPlainName && isFullName(text)) return text;
   const beforePhone = text.match(/^(.+?)\s+(?:\+?52\s*)?\d[\d\s.-]{8,}\d(?=\s|$)/)?.[1]?.trim();
   if (acceptPlainName && isFullName(beforePhone)) return beforePhone;

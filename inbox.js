@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const twilio = require('twilio');
+const workflow = require('./attention-workflow');
 const {isFullName,containsConversationWords,cleanNameHistory}=require('./aura-cro-policy');
 
 const PREFIX = 'thera-inbox-';
@@ -102,6 +103,12 @@ function installInbox(app, env=process.env, clientOverride=null) {
   });
   app.use('/api/inbox',auth);
   app.post('/api/inbox/logout',(req,res)=>{res.set('Set-Cookie','thera_inbox=; HttpOnly; Secure; SameSite=Strict; Path=/api/inbox; Max-Age=0');res.json({ok:true});});
+  app.get('/api/inbox/commercial-summary',route(async(req,res)=>{res.json(workflow.metrics(await store.list()));}));
+  app.post('/api/inbox/commercial',route(async(req,res)=>{
+    const phone=phoneNumber(req.body.phone);
+    try {const conversation=await store.mutate(phone,data=>({...data,commercial:workflow.validateManual(data.commercial,req.body)}));res.json({conversation});}
+    catch(e){if(e.message&& !e.status && !e.code)return res.status(400).json({error:e.message});throw e;}
+  }));
   app.get('/api/inbox/conversations',route(async(req,res)=>{res.json({conversations:await store.list()});}));
   app.get('/api/inbox/push-key',route(async(req,res)=>{res.json({publicKey:(await push.keys()).publicKey});}));
   app.post('/api/inbox/push-subscription',route(async(req,res)=>{await push.subscribe(req.body.subscription);res.json({ok:true});}));
@@ -155,7 +162,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
   }));
   app.post('/api/inbox/mode',route(async(req,res)=>{
     const phone=phoneNumber(req.body.phone);const mode=req.body.mode;if(!['human','aura'].includes(mode))return res.status(400).json({error:'Modo inválido.'});
-    const conversation=await locked(phone,()=>store.mutate(phone,data=>({...data,mode})));res.json({conversation});
+    const conversation=await locked(phone,()=>store.mutate(phone,data=>({...data,mode,commercial:data.commercial?{...data.commercial,handoff:data.commercial.handoff?{...data.commercial.handoff,status:mode==='human'?'in_progress':data.commercial.handoff.status,handledAt:mode==='human'?new Date().toISOString():data.commercial.handoff.handledAt}:undefined}:data.commercial})));res.json({conversation});
   }));
   app.post('/api/inbox/send',route(async(req,res)=>{
     const phone=phoneNumber(req.body.phone);const body=String(req.body.body||'').trim();const requestId=String(req.body.requestId||'');

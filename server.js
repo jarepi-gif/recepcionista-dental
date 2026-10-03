@@ -9,10 +9,12 @@ const { appendMessage } = require('./conversation-history');
 const { extractInboundAttribution, shouldSyncInboundLead, syncInboundLead } = require('./ximgrowthos-sync');
 const { isCommercialOutboundEligible, patientStateInstruction } = require('./outbound-eligibility');
 const { resolveCommercialAlertEvent, sendCommercialAlert, inboundInterestEvent, inboundTreatment } = require('./commercial-alerts');
-const { classifyAuraIntent, extractPatientFullName, hotLeadResponse, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, isFullName, cleanNameHistory } = require('./aura-cro-policy');
+const { classifyAuraIntent, extractPatientFullName, resolvePatientDisplayName, isInformationRequest, keepOfficialChat, isFullName, cleanNameHistory } = require('./aura-cro-policy');
 const { sendOpenAiLeadConversion } = require('./openai-ads-conversion');
 
+const workflow = require('./attention-workflow');
 const app = express();
+const commercialState = new Map();
 const historialConversaciones = {};
 const alertedMessageSids = new Set();
 const patientFullNames = new Map();
@@ -26,7 +28,6 @@ const knowledge = JSON.parse(fs.readFileSync('./knowledge.json', 'utf8'));
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-const { suppliedAppointmentResponse } = require('./aura-cro-policy');
 const inbox = installInbox(app);
 async function replyAura(req, res, text) {
   if (inbox.enabled && !req.auraDiagnostic) return inbox.respond(req, res, keepOfficialChat(text));
@@ -40,13 +41,17 @@ const anthropic = new Anthropic({
 });
 
 async function handleWhatsApp(req, res) {
+  let storedConversation = null;
   if (inbox.enabled && !req.auraDiagnostic) {
     if (!inbox.validate(req)) return res.sendStatus(403);
     try {
       const conversation = await inbox.store.inbound(req.body);
+      storedConversation = conversation;
       inbox.notifyInbound(req.body).catch(error=>console.error('Error de aviso al celular:',error.code||error.status||'error'));
       if (conversation.nameVerified && isFullName(conversation.name)) patientFullNames.set(req.body.From, conversation.name);
       if (conversation.mode === 'human') {
+        const commercial = workflow.updateInbound(conversation.commercial, req.body);
+        await inbox.store.mutate(req.body.From, data => ({...data, commercial}));
         try { await inbox.alertInbound(req.body,{event:'HUMAN_HANDOFF_REQUIRED',patient:conversation.name}); }
         catch(error){console.error('Error de alerta durante atención humana:',error.code||error.status||'error');}
         return res.type('text/xml').send(new twilio.twiml.MessagingResponse().toString());
@@ -61,7 +66,6 @@ async function handleWhatsApp(req, res) {
     const numero = req.body.From;
     const patientDisplayName = resolvePatientDisplayName(req.body.ProfileName);
     const auraIntent = classifyAuraIntent(mensaje);
-    const wasAwaitingFullName = awaitingFullName.has(numero);
     // A reply containing only a full name must remain recognizable after a
     // Render restart, even when the in-memory "awaiting" flag was lost.
     const suppliedFullName = extractPatientFullName(mensaje, true);
@@ -179,29 +183,33 @@ if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.Messag
     console.log('Mensaje recibido:', mensaje);
     console.log('De:', numero);
 
-    const receivedAppointment = suppliedAppointmentResponse(mensaje, verifiedFullName);
-    if (receivedAppointment) {
-      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', receivedAppointment);
-      return await replyAura(req, res, receivedAppointment);
+    let attention = workflow.updateInbound(storedConversation?.commercial || commercialState.get(numero), req.body, historialConversaciones[numero]);
+    if (crmState.isTest) attention.classification = 'test';
+    if (!attention.thirdParty && verifiedFullName) attention.patientName = verifiedFullName;
+    if (crmState.patientState === 'APPOINTMENT_SCHEDULED') attention.appointment = {...attention.appointment, status:'confirmed', evidence:'Estado CRM APPOINTMENT_SCHEDULED'};
+    const workflowReply = workflow.workflowResponse(attention, mensaje, historialConversaciones[numero], knowledge);
+    async function saveAttention(reply) {
+      attention = workflow.recordResponse(attention, reply || '', knowledge);
+      commercialState.set(numero, attention);
+      if (inbox.enabled && !req.auraDiagnostic) await inbox.store.mutate(numero, data => {
+        const current=data.commercial||{};
+        const merged={...attention,payments:current.payments||attention.payments,attendance:current.attendance??attention.attendance,treatmentAccepted:current.treatmentAccepted??attention.treatmentAccepted};
+        if(current.appointment?.status==='confirmed')merged.appointment=current.appointment;
+        if(current.updatedAt>attention.updatedAt){for(const key of ['classification','owner','canAttend','sourceNote','lossReason','followUp','handoff'])if(current[key]!==undefined)merged[key]=current[key];}
+        attention=merged;return {...data, commercial:merged};
+      });
     }
-
-    if (auraIntent === 'INTENCION_DE_AGENDAR' && !patientFullNames.has(numero)) {
-      awaitingFullName.add(numero);
-      const texto = 'Con gusto te ayudamos a continuar con tu valoración. Para registrar correctamente tu solicitud, ¿me compartes tu nombre completo, por favor?';
-      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
-      return await replyAura(req, res, texto);
+    await saveAttention();
+    if (attention.handoff?.status === 'pending' && !req.auraDiagnostic && !alertedMessageSids.has(req.body.MessageSid)) {
+      try {
+        await inbox.alertInbound(req.body, {event:'HUMAN_HANDOFF_REQUIRED',patient:attention.patientName||verifiedFullName||patientDisplayName,treatment:attention.need||'Por confirmar'});
+        alertedMessageSids.add(req.body.MessageSid);
+      } catch(error) {console.error('Alerta de solicitud pendiente:',error.code||error.status||'error');}
     }
-
-    if (suppliedFullName && !informationRequest && (wasAwaitingFullName || ['VALUATION_REQUESTED','INTENCION_DE_AGENDAR'].includes(detectedAlertEvent))) {
-      const texto = `Gracias, ${suppliedFullName}. Registré tu nombre y tu solicitud. Coordinaremos tu valoración aquí mismo. ¿Qué día y horario prefieres? Nuestro equipo te confirmará la disponibilidad por este chat.`;
-      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
-      return await replyAura(req, res, texto);
-    }
-
-    if (auraIntent === 'INTENCION_DE_AGENDAR' && crmState.patientState !== 'APPOINTMENT_SCHEDULED' && !crmState.humanHandoffRequired) {
-      const texto = hotLeadResponse(mensaje);
-      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', texto);
-      return await replyAura(req, res, texto);
+    if (workflowReply) {
+      await saveAttention(workflowReply);
+      historialConversaciones[numero] = appendMessage(historialConversaciones[numero], 'assistant', workflowReply);
+      return await replyAura(req, res, workflowReply);
     }
 
     const respuestaClaude = await anthropic.messages.create({
@@ -212,6 +220,8 @@ if (!req.auraDiagnostic && alertEvent && !alertedMessageSids.has(req.body.Messag
 Nombre completo confirmado del paciente: ${verifiedFullName || 'No confirmado; no interpretes saludos ni consultas como nombres y no reutilices nombres erróneos de mensajes anteriores.'}
 
 ${patientStateInstruction(crmState)}
+
+${workflow.instructions(attention, knowledge)}
 
 Tu trabajo es atender pacientes por WhatsApp de forma cálida, profesional y natural, como lo haría una asistente dental con experiencia dentro de la clínica.
 
@@ -310,7 +320,9 @@ Responde siempre en español de forma natural y conversacional, como una persona
       messages: historialConversaciones[numero]
     });
 
-    const texto = keepOfficialChat(respuestaClaude.content[0].text);
+    let texto = keepOfficialChat(respuestaClaude.content[0].text);
+    if (!attention.locationShared && !['test','supplier'].includes(attention.classification) && !/interlomas/i.test(texto)) texto += '\n\nNuestra sede está en Interlomas. ¿Te es posible acudir?';
+    await saveAttention(texto);
 
     historialConversaciones[numero] = appendMessage(
       historialConversaciones[numero],
@@ -327,24 +339,31 @@ Responde siempre en español de forma natural y conversacional, como una persona
     catch (replyError) { return res.sendStatus(503); }
   }
 }
-app.post('/whatsapp', handleWhatsApp);
+// Serialize each patient's inbound turns so concurrent webhooks cannot discard context.
+const conversationJobs = new Map();
+app.post('/whatsapp', async (req,res) => {
+ const phone=req.body.From;const previous=conversationJobs.get(phone)||Promise.resolve();
+ const job=previous.catch(()=>{}).then(()=>handleWhatsApp(req,res));conversationJobs.set(phone,job);
+ try {await job;} finally {if(conversationJobs.get(phone)===job)conversationJobs.delete(phone);}
+});
 if (inbox.enabled) app.post('/api/inbox/check-response', async (req, res) => {
   const message = String(req.body.message || '').trim();
   if (!message || message.length > 1000) return res.status(400).json({error:'Mensaje de prueba inválido.'});
   const id = 'diagnostic:' + require('node:crypto').randomUUID();
   const testReq = {auraDiagnostic:true, body:{Body:message, From:id, MessageSid:id, ProfileName:''}};
-  historialConversaciones[id] = cleanNameHistory([
+  historialConversaciones[id] = cleanNameHistory(Array.isArray(req.body.history) ? req.body.history.slice(-14).filter(x=>['user','assistant'].includes(x.role)&&typeof x.content==='string').map(x=>({role:x.role,content:x.content.slice(0,2000)})) : [
     {role:'user',content:'JR Hola quiero mas informacion'},
     {role:'assistant',content:'Gracias, JR Hola quiero mas informacion. Registré tu nombre y tu solicitud.'}
   ]);
+  if(req.body.commercial && typeof req.body.commercial==='object') commercialState.set(id, req.body.commercial);
   let status=200;
   let xml='';
   const testRes = {type(){return this;},status(value){status=value;return this;},send(value){xml=String(value);return this;},sendStatus(value){status=value;return this;}};
   try {
     await handleWhatsApp(testReq,testRes);
-    return res.status(status).json({diagnostic:true,name:extractPatientFullName(message,true),intent:classifyAuraIntent(message),responseXml:xml,patientMessagesSent:0});
+    return res.status(status).json({diagnostic:true,name:extractPatientFullName(message,true),intent:classifyAuraIntent(message),responseXml:xml,commercial:commercialState.get(id),patientMessagesSent:0});
   } catch(error) {return res.status(503).json({error:'No se pudo completar la prueba de Aura.'});}
-  finally {delete historialConversaciones[id];patientFullNames.delete(id);awaitingFullName.delete(id);pendingCommercialAlerts.delete(id);activeTestConversations.delete(id);alertedMessageSids.delete(id);}
+  finally {delete historialConversaciones[id];patientFullNames.delete(id);awaitingFullName.delete(id);pendingCommercialAlerts.delete(id);activeTestConversations.delete(id);alertedMessageSids.delete(id);commercialState.delete(id);}
 });
 
 app.get('/', (req, res) => {
@@ -355,7 +374,9 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     inboxEnabled: inbox.enabled,
-    inboxVersion: '1.0.0',
+    inboxVersion: '2.0.0',
+    attentionVersion: workflow.VERSION,
+    agendaIntegrated: false,
     nameDetectionVersion: '2.1.0',
     schedulingChannel: 'official-whatsapp',
     alertsVersion: 'interest-and-web-push-v1',

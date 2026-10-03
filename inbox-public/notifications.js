@@ -13,7 +13,7 @@ function pulsePhone(eventId){
   }
 }
 function checkIncomingAvisos(conversations){
-  for(const conversation of conversations){const sid=conversation.lastInboundSid;if(!sid)continue;const previous=inboxBaselines.get(conversation.phone);if(previous&&previous!==sid)pulsePhone(sid);else if(!previous&&inboxBaselines.size&&new Date(conversation.lastInbound)>new Date(Date.now()-20000))pulsePhone(sid);inboxBaselines.set(conversation.phone,sid);}
+  for(const conversation of conversations){const c=conversation.commercial;const task=c?.followUp?.status==='agreed'?c.followUp:c?.handoff?.status==='pending'?c.handoff:null;if(task?.dueAt&&Date.parse(task.dueAt)<Date.now())pulsePhone('task-'+conversation.phone+'-'+task.dueAt);const sid=conversation.lastInboundSid;if(!sid)continue;const previous=inboxBaselines.get(conversation.phone);if(previous&&previous!==sid)pulsePhone(sid);else if(!previous&&inboxBaselines.size&&new Date(conversation.lastInbound)>new Date(Date.now()-20000))pulsePhone(sid);inboxBaselines.set(conversation.phone,sid);}
 }
 function applicationKey(value){const bytes=atob(value.replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(bytes,c=>c.charCodeAt(0));}
 const alertsButton=document.getElementById('activate-avisos');

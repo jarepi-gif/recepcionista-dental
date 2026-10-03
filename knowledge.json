@@ -16,14 +16,14 @@
 "telefono_sin_formato": "5579113424",
 "email": "[info@theradentalclinic.com](mailto:info@theradentalclinic.com)",
 "direccion": {
-"lugar": "PLAZA CENTRAL INTERLOMAS",
+"lugar": "PLAZA CENTTRAL INTERLOMAS",
 "local": "Local PB 11",
 "calle": "Blvd. Palmas Hills 1",
 "colonia": "Villa de las Palmas",
 "codigo_postal": "52787",
 "municipio": "Naucalpan de Juárez",
 "estado": "Estado de México",
-"direccion_completa": "PLAZA CENTRAL INTERLOMAS, Local PB 11, Blvd. Palmas Hills 1, Villa de las Palmas, C. P. 52787, Naucalpan de Juárez, Estado de México"
+"direccion_completa": "PLAZA CENTTRAL INTERLOMAS, Local PB 11, Blvd. Palmas Hills 1, Villa de las Palmas, C. P. 52787, Naucalpan de Juárez, Estado de México"
 },
 "sitio_web": "https://theradentalclinic.com/",
 "redes_sociales": {
@@ -31,8 +31,13 @@
 "instagram": "Disponible en el sitio web oficial."
 },
 "horario": {
-"nota": "El sitio menciona sección de horario, pero no muestra horas específicas. Si el paciente pregunta por horarios, solicitar autorización para consultar disponibilidad o invitar a agendar."
-}
+"lunes_viernes": "11:00–18:00",
+"sabado": "11:00–15:00",
+"domingo": "Cerrado",
+"nota": "Horario de atención, no disponibilidad de citas. El responsable verifica la agenda."
+},
+"mapa_url": "https://www.google.com/maps/search/?api=1&query=Plaza%20Centtral%2C%20Blvd.%20Palmas%20Hills%201%2C%20Villa%20de%20las%20Palmas%2C%2052787%2C%20Naucalpan%20de%20Ju%C3%A1rez%2C%20Estado%20de%20M%C3%A9xico",
+"mapa_tipo": "Búsqueda por dirección oficial verificada; no certifica un pin geográfico."
 },
 "doctor_principal": {
 "nombre": "Dr. Jaime Augusto Reyes Pinzón",
@@ -191,7 +196,7 @@
 "nombre": "Paquete Básico Inicial",
 "precio_mxn": 1500,
 "precio_texto": "$1,500 MXN",
-"regla_precio": "Dar el precio únicamente si el paciente pregunta por el costo del Paquete Básico Inicial.",
+"regla_precio": "Explicar pronto que $1,500 MXN corresponde a la valoración y no al tratamiento; primera explicación con nueve componentes completos.",
 "descripcion": "Cita de valoración profesional necesaria antes de recomendar un tratamiento específico.",
 "incluye": [
 "Valoración profesional.",
@@ -301,15 +306,15 @@
 "Si el paciente pregunta por costos publicados, responder con cuidado y aclarar que la valoración permite confirmar el plan correcto.",
 "Si no hay información suficiente, invitar a agendar el Paquete Básico Inicial.",
 "No repetir información que ya se explicó en la conversación.",
-"Responder con ortografía perfecta y mensajes completos."
+"Responder con ortografía perfecta y mensajes completos.",
+"No exigir teléfono ya disponible ni correo para solicitar cita.",
+"No asignar un paquete por inferencia ni prometer anticipos o descuentos sin condiciones confirmadas.",
+"No ofrecer disponibilidad real ni confirmar citas sin consulta verificada de agenda."
 ],
 "datos_para_agendar": [
-"Nombre completo",
-"Número telefónico",
-"Correo electrónico",
-"Día preferido",
-"Hora preferida",
-"Tratamiento de interés"
+"Nombre completo de la persona que acudirá (sólo si falta)",
+"Día y hora preferidos (sólo si faltan)",
+"Tratamiento de interés (conservar si ya lo indicó)"
 ]
 },
 "fuentes": {
