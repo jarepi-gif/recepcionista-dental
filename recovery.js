@@ -3,7 +3,7 @@ const crypto=require('node:crypto');
 const workflow=require('./attention-workflow');
 const {inboundTreatment}=require('./commercial-alerts');
 const SETTINGS='thera-recovery-settings-v1';
-const BODY='Hola, somos Thera Dental Clinic. Retomamos tu consulta pendiente. ¿Deseas que te ayudemos a coordinar tu valoración en Interlomas por este chat? El Dr. Jaime Reyes revisará la disponibilidad antes de confirmar. Si prefieres no recibir seguimiento, responde NO.';
+const BODY='Hola, soy Aura, asistente de Thera Dental Clinic. Retomo tu consulta pendiente. ¿Deseas que te ayude a coordinar tu valoración en Interlomas por este chat? El Dr. Jaime Reyes revisará la disponibilidad antes de confirmar. Si prefieres no recibir seguimiento, responde NO.';
 const canonical=p=>String(p||'').replace(/\D/g,'').replace(/^521(?=\d{10}$)/,'52');
 function businessHours(now){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Mexico_City',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(x=>[x.type,x.value]));const m=Number(p.hour)*60+Number(p.minute);return p.weekday!=='Sun'&&m>=660&&m<(p.weekday==='Sat'?900:1080);}
 function assess(conversation,messages,doctor){
@@ -41,9 +41,10 @@ function summarize(rows,now=new Date()){
 function createRecovery({client,store,from,env,push,locked}){
  const docs=store.documents;let running=false,lastReport=0;
  async function settings(){try{return (await docs(SETTINGS).fetch()).data;}catch(e){if(e.status===404)return {enabled:false};throw e;}}
- async function templateStatus(s){if(!s.contentSid)return {status:'not_configured'};const approval=await client.content.v1.contents(s.contentSid).approvalFetch().fetch();return {sid:s.contentSid,status:String(approval.whatsapp?.status||'unknown').toLowerCase()};}
+ async function templateStatus(s){if(!s.contentSid)return {status:'not_configured'};try{const approval=await client.content.v1.contents(s.contentSid).approvalFetch().fetch();return {sid:s.contentSid,status:String(approval.whatsapp?.status||'unknown').toLowerCase()};}catch(e){if(e.status===404)return {sid:s.contentSid,status:'pending'};throw e;}}
  async function configure(input){
   const old=await settings(),data={...old};if(input.enabled!==undefined)data.enabled=input.enabled===true;
+  if(input.enabled===true&&!data.contentSid){try{data.contentSid=await require('./recovery-template').prepare(client,BODY);delete data.templateSetupError;}catch(e){data.templateSetupError=e.code||e.status||'template_setup_failed';}}
   if(input.contentSid){if(!/^HX[a-f0-9]{32}$/i.test(input.contentSid))throw new Error('Plantilla inválida');const content=await client.content.v1.contents(input.contentSid).fetch();const body=content.types?.['twilio/text']?.body;if(body!==BODY)throw new Error('La plantilla debe coincidir exactamente con el mensaje de recuperación aprobado');data.contentSid=input.contentSid;const status=await templateStatus(data);if(status.status!=='approved')throw new Error('La plantilla todavía no está aprobada');}
   data.updatedAt=new Date().toISOString();try{await docs(SETTINGS).update({data});}catch(e){if(e.status!==404)throw e;await docs.create({uniqueName:SETTINGS,data});}return data;
  }
@@ -77,7 +78,7 @@ function createRecovery({client,store,from,env,push,locked}){
     await locked(row.phone,async()=>{
      let data=(await store.ensure(row.phone)).data,r=data.recovery;
      const appointment=data.commercial?.appointment;
-     if(appointment?.status==='confirmed'&&Date.parse(appointment.at)>+now&&appointment.confirmedBy&&appointment.evidence&&data.confirmationNotice?.appointmentAt!==appointment.at&&businessHours(now)){
+     if(!data.commercial?.doNotContact&&appointment?.status==='confirmed'&&Date.parse(appointment.at)>+now&&appointment.confirmedBy&&appointment.evidence&&data.confirmationNotice?.appointmentAt!==appointment.at&&businessHours(now)){
       if(!data.lastInbound||+now-Date.parse(data.lastInbound)>=24*3600000-60000){await store.mutate(row.phone,d=>({...d,confirmationNotice:{status:'needs_template',appointmentAt:null,pendingAppointmentAt:appointment.at}}));}
       else{
        const claim='thera-appointment-notice-'+crypto.createHash('sha256').update(canonical(row.phone)+'|'+appointment.at).digest('hex');
@@ -95,7 +96,7 @@ function createRecovery({client,store,from,env,push,locked}){
      if(data.commercial?.classification==='prospect'&&!data.commercial?.doNotContact&&data.commercial?.handoff?.status==='pending'&&Date.parse(data.commercial.handoff.dueAt)<=+now&&businessHours(now))await notifyOwner(data,'handoff-'+canonical(data.phone)+'-'+data.commercial.handoff.requestedAt);
      if(!r)return;
      if(r.sid&&r.responseForSid!==r.sid&&data.lastInboundSid!==r.baselineInboundSid&&Date.parse(data.lastInbound)>Date.parse(r.sentAt)){
-      data=await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'responded',respondedAt:d.recovery.respondedAt||d.lastInbound,latestResponseAt:d.lastInbound,responseForSid:r.sid,responseSid:d.lastInboundSid},commercial:{...d.commercial,handoff:['completed','in_progress'].includes(d.commercial?.handoff?.status)?d.commercial.handoff:{...d.commercial?.handoff,status:'pending',owner:d.commercial?.owner||workflow.OWNER,requestedAt:now.toISOString(),dueAt:workflow.nextServiceDeadline(now)}}}));
+      data=await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'responded',respondedAt:d.recovery.respondedAt||d.lastInbound,latestResponseAt:d.lastInbound,responseForSid:r.sid,responseSid:d.lastInboundSid}}));
       r=data.recovery; // The inbound webhook already sends the doctor's existing alert.
      }
      if(r.sid&&!['read','failed','undelivered'].includes(r.deliveryStatus)){

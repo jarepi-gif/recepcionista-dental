@@ -54,9 +54,11 @@ function updateInbound(previous,body,history=[],now=new Date()){
  else if(c.awaiting==='attendance'&&no(text))c.canAttend='no';
  if(/\b(?:no me contacten|no quiero mensajes|dejen de escribirme|no me escriban)\b/.test(n)||/^(?:stop|baja|cancelar seguimiento)$/.test(n)||(no(text)&&/no recibir seguimiento/i.test(last))){c.doNotContact=true;c.followUp=c.followUp?{...c.followUp,status:'declined'}:null;}
  if(c.followUp?.status==='proposed'){
-  if(yes(text)){c.followUp={...c.followUp,status:'agreed',agreedAt:now.toISOString(),evidenceSid:body.MessageSid};c.whatsappFollowupConsent={evidence:body.MessageSid,scope:'Seguimiento de la consulta por WhatsApp',grantedAt:now.toISOString()};c.awaiting=null;}
+  if(yes(text)&&/seguimiento|te contacte|continue contigo/.test(normalize(last))&&/por este chat|por este whatsapp/.test(normalize(last))){c.followUp={...c.followUp,status:'agreed',agreedAt:now.toISOString(),evidenceSid:body.MessageSid};c.whatsappFollowupConsent={evidence:body.MessageSid,scope:'Seguimiento de la consulta por WhatsApp',grantedAt:now.toISOString()};c.awaiting=null;}
   else if(no(text)){c.followUp={...c.followUp,status:'declined'};c.awaiting=null;}
  }
+ if(c.awaiting==='whatsapp_followup_permission'&&/autorizas que aura/.test(normalize(last))&&yes(text)){c.whatsappFollowupConsent={evidence:body.MessageSid,scope:'Seguimiento de la consulta por WhatsApp',grantedAt:now.toISOString()};c.awaiting=null;}
+ if(c.awaiting==='whatsapp_followup_permission'&&/autorizas que aura/.test(normalize(last))&&no(text)){c.doNotContact=true;c.awaiting=null;c.whatsappFollowupConsent=null;}
  const priceQuestion=/\b(?:precio|costo|cuanto|incluye|anticipo|abono|descuenta)\b/.test(n);
  const accept=c.followUp?.evidenceSid!==body.MessageSid&&yes(text)&&/\b(?:agendar|cita|valoraci[oó]n)\b/i.test(last)&&c.awaiting!=='attendance';
  const preference=appointmentPreference(text);
@@ -78,8 +80,9 @@ function workflowResponse(c,text,history,k,now=new Date()){
  const location=/\b(?:donde|direccion|ubicacion|ubicados|ubican|ubicada|mapa|como llegar|sucursal|cuernavaca|nogales)\b/.test(n);
  const price=/\b(?:precio|cuanto|costo|sale|cuestan)\b/.test(n);
  if(['test','supplier'].includes(c.classification))return null;
- if(c.followUp?.status==='agreed'&&c.followUp.evidenceSid===c.lastInboundSid&&yes(text))return `Gracias. El ${c.followUp.date} ${c.followUp.timeLabel||''}, el ${c.followUp.owner} tiene registrado el seguimiento por este chat. Si necesitas cambiarlo, avísanos aquí.`;
+ if(c.followUp?.status==='agreed'&&c.followUp.evidenceSid===c.lastInboundSid&&yes(text))return `Gracias. Soy Aura y continuaré el seguimiento por este chat el ${c.followUp.date}. El ${c.followUp.owner} es el responsable de verificar la agenda y confirmar tu cita. Si necesitas cambiar el seguimiento, avísame aquí.`;
  if(c.doNotContact)return 'Entendido. Registré que no deseas recibir seguimiento. Si necesitas ayuda en otro momento, puedes escribirnos por este chat.';
+ if(c.whatsappFollowupConsent?.evidence===c.lastInboundSid&&yes(text))return 'Gracias. Soy Aura y continuaré contigo por este WhatsApp para resolver dudas y acompañarte hasta la confirmación de tu cita. El Dr. Jaime verificará la disponibilidad real en agenda.';
  if(location){c.locationShared=true;c.awaiting='attendance';return `Estamos en Plaza Centtral Interlomas, planta baja, local 11, Blvd. Palmas Hills 1, Villa de las Palmas, Estado de México.\nMapa de la dirección: ${k.clinica.mapa_url}\nNuestra sede está en Interlomas. ¿Te es posible acudir a esta ubicación?`;}
  if(c.canAttend==='no')return 'Entiendo; gracias por decirnos. Nuestra sede está en Interlomas. No continuaré con una solicitud de cita si el traslado no te resulta viable. Si quieres revisar alguna duda, podemos resolverla por aquí.';
  if(explicitPackage||confusion){const repeat=c.packageExplained&&!confusion&&!/incluye/.test(n);c.packageExplained=true;c.priceMisunderstanding=confusion||c.priceMisunderstanding;return (repeat?'El Paquete Básico Inicial cuesta $1,500 MXN y corresponde a la valoración; el tratamiento se presupuesta por separado.':packageText(k))+'\n\n¿Te es posible acudir a Interlomas?';}
@@ -88,13 +91,15 @@ function workflowResponse(c,text,history,k,now=new Date()){
  if(price&&c.need==='Implantes dentales'&&c.teeth===1){const p=k.precios_publicados.rehabilitacion_implante_un_diente;const first=!c.packageExplained;c.packageExplained=true;return (first?packageText(k)+'\n\n':'')+`La referencia publicada para un diente es ${p.precio_texto}: un implante monofásico y una corona de grapheno o zirconio, sujeto a valoración. El equipo debe confirmar las condiciones de la valoración incluida en ese plan; no asumiré descuentos ni anticipos.\n¿Te es posible acudir a Interlomas?`;}
  if(/\b(?:comentar|consultar|hablar)\b.*\b(?:familia|esposa|esposo)\b|\b(?:manana les confirmo|proxima semana.*(?:aviso|dia)|les aviso la proxima semana)\b/.test(n)&&!c.doNotContact&&c.appointment.status!=='confirmed'){
   const days=/proxima semana/.test(n)?7:1;const target=nextDayDate(now,days);const dueAt=nextServiceDeadline(new Date(`${target}T11:00:00-06:00`),0);const parts=mexicoParts(new Date(dueAt));const date=`${parts.year}-${parts.month}-${parts.day}`;c.followUp={status:'proposed',date,dueAt,owner:c.owner||OWNER,proposedAt:now.toISOString()};c.awaiting='followup';
-  return `Por supuesto, puedes revisarlo con calma. ¿Te parece que el Dr. Jaime te contacte por este chat el ${date} para resolver dudas y ayudarte a elegir tu cita?`;
+  return `Por supuesto, puedes revisarlo con calma. ¿Autorizas que yo, Aura, continúe contigo por este WhatsApp el ${date} para resolver dudas y ayudarte a coordinar tu cita? El Dr. Jaime verificará la agenda antes de confirmarla.`;
  }
  if(c.appointment.status==='pending'&&!price&&!explicitPackage){
   const missing=[];if(!c.patientName)missing.push(c.thirdParty?'el nombre completo de la persona que acudirá':'tu nombre completo');if(!c.appointment.day&&!c.appointment.time)missing.push('el día y horario que prefieres');else {if(!c.appointment.day)missing.push('el día que prefieres');if(!c.appointment.time)missing.push('el horario que prefieres');}
   let reply=missing.length?`Con gusto. Para completar la solicitud, compárteme únicamente ${missing.join(' y ')}.`:`Gracias${c.patientName?', '+c.patientName:''}. Recibí tus datos y tu preferencia: ${c.appointment.day} a las ${c.appointment.time}.`;
   if(!c.locationShared){reply+=' Nuestra sede está en Interlomas, Plaza Centtral.';}
-  const first=!c.packageExplained;c.packageExplained=true;return (first?packageText(k)+'\n\n':'')+reply+' La solicitud está pendiente de confirmación. El Dr. Jaime verificará disponibilidad y continuará por este mismo chat.';
+  const first=!c.packageExplained;c.packageExplained=true;
+  let permission='';if(!missing.length&&!c.whatsappFollowupConsent&&!c.followupPermissionAsked){c.followupPermissionAsked=true;c.awaiting='whatsapp_followup_permission';permission=' ¿Autorizas que Aura te dé seguimiento por este WhatsApp hasta confirmar la cita? Puedes decir NO si no deseas seguimiento.';}
+  return (first?packageText(k)+'\n\n':'')+reply+' La solicitud está pendiente de confirmación. Soy Aura y te acompañaré por este chat; el Dr. Jaime verificará la disponibilidad real en agenda.'+permission;
  }
  if(/^(?:¡?hola!?[., ]*)?(?:quiero|quisiera) (?:mas )?informacion[.! ]*$/.test(n)&&!c.need){c.locationShared=true;return `Hola, con gusto te orientamos. Estamos en Plaza Centtral Interlomas, planta baja, local 11.\nMapa de nuestra dirección: ${k.clinica.mapa_url}\n¿Qué tratamiento o necesidad dental te gustaría consultar?`;}
  if(c.awaiting==='attendance'&&yes(text)){c.awaiting=null;return 'Gracias. Podemos coordinar la valoración por este chat. ¿Qué día y horario prefieres? El Dr. Jaime verificará disponibilidad antes de confirmar la cita.';}

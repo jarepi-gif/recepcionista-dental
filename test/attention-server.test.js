@@ -11,7 +11,7 @@ test('complete scheduling and contextual diagnostics run through actual HTTP han
    {message:'Jaime Augusto Reyes Pinzon 5664676808 lunes 11 am',history:[{role:'assistant',content:'Compártenos tu nombre completo, día y horario para la valoración.'}],expected:/pendiente de confirmación/},
    {message:'Precio de implantes para un diente',history:[],expected:/36,000/},
    {message:'Dónde se encuentran',history:[],expected:/google.com\/maps\/search/},
-   {message:'Lo voy a comentar con mi familia',history:[],expected:/Dr. Jaime te contacte/},
+   {message:'Lo voy a comentar con mi familia',history:[],expected:/yo, Aura, continúe/},
    {message:'¡Hola! Quiero más información',history:[],expected:/Plaza Centtral Interlomas/}
   ]){
    const r=await fetch(base+'check-response',{method:'POST',headers,body:JSON.stringify(input)});const data=await r.json();assert.equal(r.status,200,JSON.stringify(data));assert.equal(data.patientMessagesSent,0);assert.match(data.responseXml,input.expected,logs);
