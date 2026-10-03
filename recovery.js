@@ -51,7 +51,8 @@ function createRecovery({client,store,from,env,push,locked}){
  async function enroll(phone,manual=false){
   const before=(await store.ensure(phone)).data;if(before.recovery)return before;
   const facts=assess(before,await history(phone),env.THERA_ALERT_RECIPIENT);if(!facts.eligible)return {...before,notEnrolledReason:facts.reason};
-  return store.mutate(phone,data=>data.recovery?data:{...data,lastInbound:facts.lastInbound,lastInboundSid:facts.lastInboundSid,commercial:{...workflow.initial(),...data.commercial,classification:'prospect',owner:data.commercial?.owner||workflow.OWNER,need:data.commercial?.need||facts.need},recovery:{status:'queued',dueAt:workflow.nextServiceDeadline(new Date(),0),enrolledAt:new Date().toISOString(),baselineInboundSid:facts.lastInboundSid,origin:manual?'historical_review':'automatic',attempts:0}});
+  const earliest=new Date(Math.max(Date.now(),Date.parse(facts.lastInbound)+4*3600000));
+  return store.mutate(phone,data=>data.recovery?data:{...data,lastInbound:facts.lastInbound,lastInboundSid:facts.lastInboundSid,commercial:{...workflow.initial(),...data.commercial,classification:'prospect',owner:data.commercial?.owner||workflow.OWNER,need:data.commercial?.need||facts.need},recovery:{status:'queued',dueAt:workflow.nextServiceDeadline(earliest,0),enrolledAt:new Date().toISOString(),baselineInboundSid:facts.lastInboundSid,origin:manual?'historical_review':'automatic',attempts:0}});
  }
  async function enrollRecent(){let enrolled=0,excluded=0;const seen=new Set();for(const row of await store.list()){
   if(!row.lastInbound)continue;
@@ -91,7 +92,7 @@ function createRecovery({client,store,from,env,push,locked}){
        }catch(e){await store.mutate(row.phone,d=>({...d,confirmationNotice:{status:'uncertain',appointmentAt:appointment.at,errorCode:e.code||null}}));}
       }
      }
-     if(data.commercial?.handoff?.status==='pending'&&Date.parse(data.commercial.handoff.dueAt)<=+now&&businessHours(now))await notifyOwner(data,'handoff-'+canonical(data.phone)+'-'+data.commercial.handoff.requestedAt);
+     if(data.commercial?.classification==='prospect'&&!data.commercial?.doNotContact&&data.commercial?.handoff?.status==='pending'&&Date.parse(data.commercial.handoff.dueAt)<=+now&&businessHours(now))await notifyOwner(data,'handoff-'+canonical(data.phone)+'-'+data.commercial.handoff.requestedAt);
      if(!r)return;
      if(r.sid&&r.responseForSid!==r.sid&&data.lastInboundSid!==r.baselineInboundSid&&Date.parse(data.lastInbound)>Date.parse(r.sentAt)){
       data=await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'responded',respondedAt:d.recovery.respondedAt||d.lastInbound,latestResponseAt:d.lastInbound,responseForSid:r.sid,responseSid:d.lastInboundSid},commercial:{...d.commercial,handoff:['completed','in_progress'].includes(d.commercial?.handoff?.status)?d.commercial.handoff:{...d.commercial?.handoff,status:'pending',owner:d.commercial?.owner||workflow.OWNER,requestedAt:now.toISOString(),dueAt:workflow.nextServiceDeadline(now)}}}));
@@ -108,6 +109,8 @@ function createRecovery({client,store,from,env,push,locked}){
      if(!['session','template'].includes(action))return;
      const claim='thera-recovery-send-'+crypto.createHash('sha256').update(canonical(row.phone)+'|'+(r.origin==='agreed'?r.dueAt:'initial')).digest('hex');
      try{await docs.create({uniqueName:claim,data:{state:'pending',phone:row.phone}});}catch(e){if(e.status!==409)throw e;await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'uncertain',blockedReason:'Envío ya reclamado; revisar antes de reenviar'}}));return;}
+     const current=(await store.ensure(row.phone)).data;
+     if(current.lastInboundSid!==data.lastInboundSid||!['session','template'].includes(decision(current,now,s,template))){await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'cancelled',blockedReason:'El caso cambió antes del envío; continuar con su nueva solicitud'}}));return;}
      await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'sending'}}));
      try{const message=await client.messages.create({from,to:row.phone,...(action==='template'?{contentSid:template.sid}:{body:BODY})});
       await docs(claim).update({data:{state:message.status,sid:message.sid,phone:row.phone}});
