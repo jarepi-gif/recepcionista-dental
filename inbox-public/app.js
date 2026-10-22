@@ -1,6 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const linkedPhone=new URLSearchParams(location.search).get('phone');
+let attentionFilter='all';
 let conversations=[], selected=null, busy=false, loading=false, sending=false, requestId=null, draftPhone=null, lastFingerprint='', timer;
 function notice(message){$('notice').textContent=message;$('notice').hidden=false;clearTimeout(timer);timer=setTimeout(()=>$('notice').hidden=true,7000);}
 async function api(path,options={}){
@@ -10,9 +11,13 @@ async function api(path,options={}){
 const post=(path,data)=>api(path,{method:'POST',body:JSON.stringify(data)});
 function date(value){return value?new Intl.DateTimeFormat('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(value)):'';}
 function renderPatients(){
-  const query=$('search').value.toLowerCase();$('patients').replaceChildren();const filtered=conversations.filter(c=>(c.name+' '+c.phone).toLowerCase().includes(query));$('count').textContent=conversations.length+' conversaciones';
-  if(!filtered.length){const p=document.createElement('p');p.textContent='Sin conversaciones. Usa “Recuperar recientes” para cargar el historial disponible de Twilio.';$('patients').append(p);}
-  for(const c of filtered){const button=document.createElement('button');button.className='patient'+(selected===c.phone?' active':'');const strong=document.createElement('strong');strong.textContent=c.name||c.phone.replace('whatsapp:','');const p=document.createElement('p');p.textContent=c.preview||'Abrir conversación';const small=document.createElement('small');small.textContent=(c.mode==='human'?'Atención humana · ':'Aura · ')+date(c.lastInbound);if(c.mode==='human')small.className='tag';const pending=c.commercial?.handoff;const follow=c.commercial?.followUp;if(pending?.status==='pending')small.textContent+=' · Solicitud pendiente'+(Date.parse(pending.dueAt)<Date.now()?' · Fuera de objetivo':'');if(follow?.status==='agreed')small.textContent+=' · Seguimiento '+date(follow.dueAt);button.append(strong,p,small);button.onclick=()=>openConversation(c.phone);$('patients').append(button);}
+  const query=$('search').value.toLowerCase();$('patients').replaceChildren();const filtered=conversations.filter(c=>(c.name+' '+c.phone).toLowerCase().includes(query)).filter(c=>attentionFilter==='all'||c.attention?.[attentionFilter]);$('count').textContent=conversations.length+' conversaciones';
+  $('unread-count').textContent=conversations.filter(c=>c.attention?.unread).length;
+  $('pending-count').textContent=conversations.filter(c=>c.attention?.pending).length;
+  if(!filtered.length){const p=document.createElement('p');p.textContent=conversations.length?'No hay conversaciones que coincidan con este filtro.':'Sin conversaciones. Usa “Recuperar recientes” para cargar el historial disponible de Twilio.';$('patients').append(p);}
+  for(const c of filtered){const button=document.createElement('button');button.className='patient'+(selected===c.phone?' active':'');const strong=document.createElement('strong');strong.textContent=c.name||c.phone.replace('whatsapp:','');const p=document.createElement('p');p.textContent=c.preview||'Abrir conversación';const small=document.createElement('small');small.textContent=(c.mode==='human'?'Atención humana · ':'Aura · ')+date(c.lastInbound);if(c.mode==='human')small.className='tag';const pending=c.commercial?.handoff;const follow=c.commercial?.followUp;if(pending?.status==='pending')small.textContent+=' · Solicitud pendiente'+(Date.parse(pending.dueAt)<Date.now()?' · Fuera de objetivo':'');if(follow?.status==='agreed')small.textContent+=' · Seguimiento '+date(follow.dueAt);const indicators=document.createElement('span');indicators.className='chat-indicators';
+  for(const [state,label] of [['unread','Sin leer'],['pending','Por atender'],['unknown','Por revisar']]){if(c.attention?.[state]){const badge=document.createElement('span');badge.className='chat-indicator '+state;badge.textContent=label;indicators.append(badge);}}
+  button.append(strong,indicators,p,small);button.onclick=()=>openConversation(c.phone);$('patients').append(button);}
 }
 async function openConversation(phone){
   if(sending)return notice('Espera a que termine el envío.');
@@ -21,7 +26,13 @@ async function openConversation(phone){
 }
 async function refreshMessages(){
   const phone=selected;if(!phone)return;const data=await api('messages?phone='+encodeURIComponent(phone));if(phone!==selected)return;
-  const c=data.conversation;renderHumanContact(c,data.canSend);renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
+  const c=data.conversation;
+  if(!document.hidden&&$('messages').getClientRects().length&&c.lastInbound&&Date.parse(c.lastReviewedInbound||0)<Date.parse(c.lastInbound)){
+    const reviewed=await post('review',{phone,lastInbound:c.lastInbound});c.lastReviewedInbound=reviewed.conversation.lastReviewedInbound;
+    if(phone===selected){const item=conversations.find(x=>x.phone===phone);if(item){item.lastReviewedInbound=c.lastReviewedInbound;if(item.attention)item.attention.unread=Date.parse(item.lastInbound)>Date.parse(c.lastReviewedInbound);}renderPatients();}
+  }
+  if(phone!==selected)return;
+  renderHumanContact(c,data.canSend);renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
   const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=!canSend;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Para retomar personalmente, abre «Retomar contacto personalmente» y envía la plantilla aprobada. Podrás escribir libremente cuando el paciente responda.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
   const fingerprint=JSON.stringify(data.messages);if(fingerprint===lastFingerprint)return;lastFingerprint=fingerprint;const box=$('messages');const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<100;const initial=!box.childNodes.length;box.replaceChildren();
   if(!data.messages.length){const p=document.createElement('p');p.textContent='No hay mensajes disponibles en Twilio para este paciente.';box.append(p);}
@@ -106,3 +117,5 @@ $('human-template-send').onclick=async()=>{
  try{const result=await post('human-template/send',{phone,requestId:humanRequestId});humanRequestId=null;notice('Plantilla aceptada por WhatsApp ('+result.status+'). Aura sigue pausada; espera la respuesta para escribir libremente.');}
  catch(e){notice(e.message);}finally{sending=false;await refreshMessages().catch(()=>{});}
 };
+
+$('attention-filter').onchange=()=>{attentionFilter=$('attention-filter').value;renderPatients();};

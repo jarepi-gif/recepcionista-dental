@@ -50,6 +50,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
   const client=clientOverride||twilio(env.TWILIO_ACCOUNT_SID,env.TWILIO_AUTH_TOKEN);
   const from=phoneNumber(env.TWILIO_WHATSAPP_NUMBER);
   const store=new InboxStore(client);
+  const attention=require('./inbox-attention').createAttention({client,store,from});
   const push=require('./inbox-push').createPushService(client,origin);
   async function alertInbound(body,input={}) {
     if(!/^[SM]M[a-fA-F0-9]{32}$/.test(String(body.MessageSid||'')))throw new Error('Identificador inválido de mensaje');
@@ -116,7 +117,11 @@ function installInbox(app, env=process.env, clientOverride=null) {
     try {const conversation=await store.mutate(phone,data=>({...data,commercial:workflow.validateManual(data.commercial,req.body)}));res.json({conversation});}
     catch(e){if(e.message&& !e.status && !e.code)return res.status(400).json({error:e.message});throw e;}
   }));
-  app.get('/api/inbox/conversations',route(async(req,res)=>{res.json({conversations:await store.list()});}));
+  app.get('/api/inbox/conversations',route(async(req,res)=>{res.json({conversations:await attention.list()});}));
+  app.post('/api/inbox/review',route(async(req,res)=>{
+    try{const conversation=await attention.review(phoneNumber(req.body.phone),req.body.lastInbound);res.json({conversation});}
+    catch(e){if(!e.status&&!e.code)return res.status(400).json({error:e.message});throw e;}
+  }));
   app.get('/api/inbox/push-key',route(async(req,res)=>{res.json({publicKey:(await push.keys()).publicKey});}));
   app.post('/api/inbox/push-subscription',route(async(req,res)=>{await push.subscribe(req.body.subscription);res.json({ok:true});}));
   app.post('/api/inbox/push-test',route(async(req,res)=>{res.json(await push.send({title:'Avisos de Thera activados',body:'Sonido y vibración dependen de los ajustes de tu celular.',eventId:'test-'+Date.now(),url:origin+'/bandeja'}));}));
@@ -183,6 +188,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
       try {await store.documents.create({uniqueName:claim,data:{phone,state:'pending'},ttl:172800});}
       catch(e){if(e.status!==409)throw e;return res.status(409).json({error:'Este envío ya fue procesado. Actualiza para comprobar su estado.'});}
       const message=await client.messages.create({from,to:phone,body});
+      attention.invalidate();
       await store.mutate(phone,data=>({...data,humanSids:[...(data.humanSids||[]),message.sid].slice(-100),preview:body.slice(0,160)}));
       await store.documents(claim).update({data:{phone,state:message.status,sid:message.sid}});
       res.json({sid:message.sid,status:message.status});

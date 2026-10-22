@@ -46,3 +46,9 @@ En cada conversación, «Retomar contacto personalmente» permite consultar y so
 El envío conserva `mode: human`, se registra como intervención humana y no altera `lastInbound`: la respuesta libre queda disponible cuando responde el paciente. Una reclamación duradera por último mensaje entrante impide repetir incluso si Twilio no confirma. No reenviar manualmente un envío incierto sin revisar el historial.
 
 Validación: `npm test` (85 pruebas), incluidos modo humano, consentimiento, rechazo, aprobación vigente, duplicados y envío incierto. Reversión del código: commit anterior `3a09323587eebb5349efc4adbd55abb88295f5fb`; no se migra ni modifica el historial existente.
+
+## Indicadores del listado
+
+«Sin leer» indica que el último mensaje entrante no se ha abierto en esta bandeja; se comparte entre los usuarios de la bandeja y no modifica las confirmaciones de lectura de WhatsApp. El historial sin una marca previa de lectura aparece sin leer hasta abrirlo. La lectura se registra por la fecha del mensaje visto, de forma que un mensaje nuevo recibido durante la carga continúa sin leer.
+
+«Por atender» indica que el último mensaje del paciente no tiene una respuesta posterior enviada, entregada o leída, o tiene una solicitud humana pendiente. Leer no resuelve ese indicador. Los mensajes fallidos o sólo en cola no cuentan como respuesta enviada. Se consultan hasta 10 000 mensajes salientes iniciales, después se actualiza el índice con mensajes recientes. Un historial que no se pudo comprobar se marca «Por revisar». El filtro y los totales permiten encontrar cada estado.
