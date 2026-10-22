@@ -102,6 +102,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     failures.delete(ip);res.set('Set-Cookie',`thera_inbox=${signedCookie()}; HttpOnly; Secure; SameSite=Strict; Path=/api/inbox; Max-Age=43200`);res.json({ok:true});
   });
   app.use('/api/inbox',auth);
+  require('./inbox-human-template').install({app,route,client,store,from,locked,phoneNumber});
   const recovery=require('./recovery').createRecovery({client,store,from,env,push,locked});
   app.get('/api/inbox/recovery',route(async(req,res)=>{const settings=await recovery.settings();res.json({settings,template:await recovery.templateStatus(settings),report:await recovery.report(),message:recovery.BODY});}));
   app.post('/api/inbox/recovery/settings',route(async(req,res)=>{try{res.json(await recovery.configure(req.body));}catch(e){if(!e.code&&!e.status)return res.status(400).json({error:e.message});throw e;}}));

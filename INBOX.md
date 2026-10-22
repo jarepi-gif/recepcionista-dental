@@ -38,3 +38,11 @@ Las consultas de información/precio y el interés explícito en tratamientos ge
 El botón Activar avisos en este celular solicita permiso de Chrome y registra una suscripción Web Push en Sync. Las claves VAPID privadas permanecen en un documento protegido del servicio; sólo se expone su clave pública. El proveedor push recibe notificaciones cifradas. El texto de la notificación no incluye el mensaje clínico del paciente. El service worker muestra la notificación, con vibración solicitada, y abre la conversación al pulsarla. El sonido de las notificaciones en segundo plano y las luces nativas dependen de los ajustes de Chrome/Android y del hardware. En la página se añade una señal visual, vibración compatible y tono de aviso tras interacción del usuario. Sin permiso se conservan los avisos con la página abierta.
 
 Los avisos del dispositivo requieren activación por el usuario en ese dispositivo; no es posible otorgar ese permiso remotamente. La aceptación del proveedor push no acredita por sí sola que el teléfono haya mostrado la notificación.
+
+## Contacto humano fuera de 24 horas
+
+En cada conversación, «Retomar contacto personalmente» permite consultar y solicitar la aprobación de `thera_human_followup_v1`, sin activar recuperación automática. Su texto identifica al equipo humano. Para enviarla hay que tomar la conversación y registrar evidencia real de permiso en la ficha; el servidor comprueba la aprobación actual y respeta el rechazo al seguimiento. El responsable revisa el destinatario y el texto antes de pulsar enviar.
+
+El envío conserva `mode: human`, se registra como intervención humana y no altera `lastInbound`: la respuesta libre queda disponible cuando responde el paciente. Una reclamación duradera por último mensaje entrante impide repetir incluso si Twilio no confirma. No reenviar manualmente un envío incierto sin revisar el historial.
+
+Validación: `npm test` (85 pruebas), incluidos modo humano, consentimiento, rechazo, aprobación vigente, duplicados y envío incierto. Reversión del código: commit anterior `3a09323587eebb5349efc4adbd55abb88295f5fb`; no se migra ni modifica el historial existente.

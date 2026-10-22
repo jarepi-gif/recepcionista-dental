@@ -21,8 +21,8 @@ async function openConversation(phone){
 }
 async function refreshMessages(){
   const phone=selected;if(!phone)return;const data=await api('messages?phone='+encodeURIComponent(phone));if(phone!==selected)return;
-  const c=data.conversation;renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
-  const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=!canSend;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Ventana de 24 horas cerrada. Para escribir se necesita una plantilla aprobada.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
+  const c=data.conversation;renderHumanContact(c,data.canSend);renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
+  const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=!canSend;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Para retomar personalmente, abre «Retomar contacto personalmente» y envía la plantilla aprobada. Podrás escribir libremente cuando el paciente responda.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
   const fingerprint=JSON.stringify(data.messages);if(fingerprint===lastFingerprint)return;lastFingerprint=fingerprint;const box=$('messages');const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<100;const initial=!box.childNodes.length;box.replaceChildren();
   if(!data.messages.length){const p=document.createElement('p');p.textContent='No hay mensajes disponibles en Twilio para este paciente.';box.append(p);}
   for(const m of data.messages){const div=document.createElement('article');div.className='message'+(m.actor==='patient'?'':' out');const actor=document.createElement('span');actor.className='actor';actor.textContent=m.actor==='patient'?'Paciente':m.actor==='human'?'Dr. Jaime / Equipo':'Aura / Automatización';const p=document.createElement('p');p.textContent=m.body||'['+m.media+' archivo(s) recibido(s)]';const small=document.createElement('small');const statuses={queued:'En cola',sent:'Enviado',delivered:'Entregado',read:'Leído',failed:'Fallido',undelivered:'No entregado',received:'Recibido',sending:'Enviando'};small.textContent=date(m.time)+' · '+(statuses[m.status]||m.status)+(m.errorCode?' · Error '+m.errorCode:'');div.append(actor,p,small);for(let index=0;index<m.media;index++){const a=document.createElement('a');a.href='/api/inbox/media?sid='+encodeURIComponent(m.sid)+'&index='+index;a.textContent='Descargar archivo '+(index+1);a.style.display='block';div.append(a);}box.append(div);}if(atBottom||initial)box.scrollTop=box.scrollHeight;
@@ -73,3 +73,36 @@ $('recovery-pause').onclick=()=>recoveryAction('settings',{enabled:false});
 $('recovery-recent').onclick=()=>recoveryAction('recent');
 $('recovery-run').onclick=()=>recoveryAction('run');
 $('recovery-enroll').onclick=()=>selected&&recoveryAction('enroll',{phone:selected});
+
+let humanTemplate=null,humanConversation=null,humanRequestId=null,humanDraftPhone=null;
+function renderHumanContact(c,canSend){
+ humanConversation=c;
+ if(humanDraftPhone!==c.phone){humanDraftPhone=c.phone;humanRequestId=null;}
+ $('human-contact').hidden=Boolean(canSend);
+ const consent=c.commercial?.whatsappFollowupConsent?.evidence;
+ const refused=c.commercial?.doNotContact||c.commercial?.followUp?.status==='declined';
+ const awaiting=c.humanTemplate?.sid&&c.humanTemplate.baselineInboundSid===(c.lastInboundSid||null);
+ $('human-template-send').disabled=sending||c.mode!=='human'||!consent||refused||awaiting||humanTemplate?.status!=='approved';
+ $('human-template-hint').textContent=refused?'Este contacto rechazó el seguimiento.':awaiting?'Plantilla ya enviada. Espera la respuesta del paciente; Aura sigue pausada.':c.mode!=='human'?'Pulsa Tomar conversación para atenderlo tú.':!consent?'Registra en Ficha comercial y seguimiento la evidencia del permiso recibido por WhatsApp.':humanTemplate?.status==='approved'?'Plantilla lista. Tú decides cuándo enviarla; Aura permanece pausada.':'Consulta o solicita la aprobación de la plantilla.';
+}
+async function checkHumanTemplate(prepare=false){
+ $('human-template-check').disabled=true;$('human-template-prepare').disabled=true;
+ try{humanTemplate=prepare?await post('human-template/prepare',{}):await api('human-template');
+ const labels={approved:'Aprobada',pending:'Pendiente de aprobación',received:'Recibida para revisión',rejected:'Rechazada',unsubmitted:'Sin enviar a revisión',not_configured:'Sin configurar',paused:'Pausada',disabled:'Deshabilitada'};
+ $('human-template-status').textContent='Plantilla de atención humana: '+(labels[humanTemplate.status]||humanTemplate.status);
+ $('human-template-preview').textContent=humanTemplate.body;
+ $('human-template-prepare').hidden=!['not_configured','unsubmitted'].includes(humanTemplate.status);
+ if(humanConversation)renderHumanContact(humanConversation,!$('body').disabled);
+ }catch(e){humanTemplate=null;$('human-template-send').disabled=true;notice(e.message);}finally{$('human-template-check').disabled=false;$('human-template-prepare').disabled=false;}
+}
+$('human-template-check').onclick=()=>checkHumanTemplate();
+$('human-contact').ontoggle=()=>{if($('human-contact').open&&!humanTemplate)checkHumanTemplate();};
+$('human-template-prepare').onclick=()=>checkHumanTemplate(true);
+$('human-template-send').onclick=async()=>{
+ if(sending||!selected||$('human-template-send').disabled)return;
+ const phone=selected;
+ if(!confirm('¿Enviar este mensaje de atención humana a '+$('patient-name').textContent+' ('+$('patient-phone').textContent+')?\n\n'+humanTemplate.body))return;
+ sending=true;$('human-template-send').disabled=true;humanRequestId=humanRequestId||crypto.randomUUID();
+ try{const result=await post('human-template/send',{phone,requestId:humanRequestId});humanRequestId=null;notice('Plantilla aceptada por WhatsApp ('+result.status+'). Aura sigue pausada; espera la respuesta para escribir libremente.');}
+ catch(e){notice(e.message);}finally{sending=false;await refreshMessages().catch(()=>{});}
+};

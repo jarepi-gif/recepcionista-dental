@@ -43,3 +43,39 @@ test('human sends enforce window, takeover and durable deduplication',async()=>{
     await inbox.store.mutate(phone,d=>({...d,lastInbound:new Date().toISOString()}));assert.equal((await send()).status,200);assert.equal(sends,1);assert.equal((await send()).status,409);assert.equal(sends,1);
   }finally{server.close();}
 });
+
+test('manual template requires human mode, consent and live approval; prevents duplicates without reopening window',async()=>{
+ const fake=fakeClient(),{BODY,NAME}=require('../inbox-human-template');let approval='pending',sends=0;
+ const contents=()=>({approvalFetch:()=>({fetch:async()=>({whatsapp:{status:approval}})})});
+ contents.list=async()=>[{sid:'HX'+'a'.repeat(32),friendlyName:NAME,types:{'twilio/text':{body:BODY}}}];
+ fake.client.content={v1:{contents}};fake.client.messages={create:async input=>{assert.equal(input.contentSid,'HX'+'a'.repeat(32));assert.equal(input.body,undefined);sends++;return {sid:'SM'+'b'.repeat(32),status:'queued'};}};
+ const app=express();app.use(express.json());const inbox=installInbox(app,envForTest,fake.client),phone='whatsapp:+525500000001';
+ await inbox.store.inbound({From:phone,MessageSid:'SMold',Body:'Hola'});
+ const old=new Date(Date.now()-48*3600000).toISOString();await inbox.store.mutate(phone,d=>({...d,lastInbound:old}));
+ const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
+ try{
+ const base='http://127.0.0.1:'+server.address().port+'/api/inbox/';
+ assert.equal((await fetch(base+'human-template')).status,401);
+ const login=await fetch(base+'session',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://example.com'},body:JSON.stringify({password:envForTest.INBOX_SECRET})});
+ const headers={'Content-Type':'application/json',Origin:'https://example.com','X-Inbox-Request':'1',Cookie:login.headers.get('set-cookie').split(';')[0]};
+ const send=(requestId='a'.repeat(32))=>fetch(base+'human-template/send',{method:'POST',headers,body:JSON.stringify({phone,requestId})});
+ assert.equal((await send()).status,409);
+ await inbox.store.mutate(phone,d=>({...d,mode:'human'}));assert.equal((await send()).status,409);
+ await inbox.store.mutate(phone,d=>({...d,commercial:{whatsappFollowupConsent:{evidence:'Permiso real recibido'}}}));assert.equal((await send()).status,409);assert.equal(sends,0);
+ approval='approved';await inbox.store.mutate(phone,d=>({...d,commercial:{...d.commercial,doNotContact:true}}));assert.equal((await send()).status,409);
+ await inbox.store.mutate(phone,d=>({...d,commercial:{...d.commercial,doNotContact:false}}));
+ assert.equal((await send()).status,200);assert.equal(sends,1);
+ assert.equal((await send('b'.repeat(32))).status,409);assert.equal(sends,1);
+ const data=(await inbox.store.ensure(phone)).data;assert.equal(data.mode,'human');assert.equal(data.lastInbound,old);assert.ok(data.humanSids.includes('SM'+'b'.repeat(32)));
+ }finally{inbox.recovery.stop();server.close();}
+});
+
+test('manual template never retries uncertain provider sends',async()=>{
+ const {install,BODY,NAME}=require('../inbox-human-template'),fake=fakeClient(),store=new InboxStore(fake.client);let sends=0;
+ const contents=()=>({approvalFetch:()=>({fetch:async()=>({whatsapp:{status:'approved'}})})});contents.list=async()=>[{sid:'HX'+'a'.repeat(32),friendlyName:NAME,types:{'twilio/text':{body:BODY}}}];fake.client.content={v1:{contents}};fake.client.messages={create:async()=>{sends++;throw new Error('timeout');}};
+ const phone='whatsapp:+525500000001';await store.mutate(phone,d=>({...d,mode:'human',lastInboundSid:'SMold',commercial:{whatsappFollowupConsent:{evidence:'Permiso'}}}));
+ let handler;install({app:{get(){},post(path,fn){if(path.endsWith('/send'))handler=fn;}},route:fn=>fn,client:fake.client,store,from:'whatsapp:+525579113424',locked:async(_,fn)=>fn(),phoneNumber});
+ const res={status(code){this.code=code;return this;},json(){}};
+ await assert.rejects(handler({body:{phone,requestId:'a'.repeat(32)}},res),/timeout/);
+ await handler({body:{phone,requestId:'b'.repeat(32)}},res);assert.equal(res.code,409);assert.equal(sends,1);
+});
