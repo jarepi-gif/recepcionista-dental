@@ -79,3 +79,14 @@ test('manual template never retries uncertain provider sends',async()=>{
  await assert.rejects(handler({body:{phone,requestId:'a'.repeat(32)}},res),/timeout/);
  await handler({body:{phone,requestId:'b'.repeat(32)}},res);assert.equal(res.code,409);assert.equal(sends,1);
 });
+
+test('manual contact can reuse exact configured recovery template while human template is pending',async()=>{
+ const {status,BODY,NAME}=require('../inbox-human-template');const sid='HX'+'c'.repeat(32),human='HX'+'a'.repeat(32);
+ const contents=id=>({fetch:async()=>({types:{'twilio/text':{body:require('../recovery').BODY}}}),approvalFetch:()=>({fetch:async()=>({whatsapp:{status:id===sid?'approved':'pending'}})})});
+ contents.list=async()=>[{sid:human,friendlyName:NAME,types:{'twilio/text':{body:BODY}}}];
+ const client={content:{v1:{contents}}},store={documents:()=>({fetch:async()=>({data:{contentSid:sid}})})};
+ const result=await status(client,store);assert.equal(result.sid,sid);assert.equal(result.source,'recovery');assert.equal(result.body,require('../recovery').BODY);
+ contents(sid).fetch=async()=>({});
+ contents.list=async()=>[];const unknownStore={documents:()=>({fetch:async()=>{throw {status:404};}})};
+ assert.equal((await status(client,unknownStore)).status,'not_configured');
+});
