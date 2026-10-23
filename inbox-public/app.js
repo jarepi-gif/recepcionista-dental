@@ -120,3 +120,18 @@ $('human-template-send').onclick=async()=>{
 };
 
 $('attention-filter').onchange=()=>{attentionFilter=$('attention-filter').value;renderPatients();};
+
+let consentPreview=null;
+$('phone-consent-preview').onclick=async()=>{
+ if(busy)return;busy=true;$('phone-consent-apply').hidden=true;
+ try{const before=$('phone-consent-before').value;const result=await post('phone-consent/preview',{before});consentPreview={before,phones:result.contacts.map(c=>c.phone)};$('phone-consent-results').textContent=result.count+' contactos elegibles. Se excluyen rechazos, pruebas, proveedores y duplicados.\n'+result.contacts.map(c=>c.name+' (…'+c.phone.slice(-4)+')').join('\n');$('phone-consent-apply').hidden=!result.count;}
+ catch(e){consentPreview=null;notice(e.message);}finally{busy=false;}
+};
+$('phone-consent-before').onchange=()=>{consentPreview=null;$('phone-consent-apply').hidden=true;};
+$('phone-consent-apply').onclick=async()=>{
+ if(busy||!consentPreview)return;
+ if(!confirm('¿Confirmas que estos '+consentPreview.phones.length+' contactos autorizaron por llamada el seguimiento por WhatsApp? Se registrará tu declaración y se activará atención humana, sin enviar mensajes.'))return;
+ busy=true;$('phone-consent-apply').disabled=true;
+ try{const result=await post('phone-consent/apply',{...consentPreview,confirmed:true});$('phone-consent-results').textContent=result.updated+' contactos habilitados para atención humana. '+result.skipped+' omitidos. No se enviaron mensajes.\n'+result.contacts.map(c=>c.name+' (…'+c.phone.slice(-4)+')').join('\n');consentPreview=null;$('phone-consent-apply').hidden=true;await refresh();}
+ catch(e){notice(e.message);}finally{busy=false;$('phone-consent-apply').disabled=false;}
+};
