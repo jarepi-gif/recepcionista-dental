@@ -33,7 +33,7 @@ async function refreshMessages(){
   }
   if(phone!==selected)return;
   renderHumanContact(c,data.canSend);renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
-  const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=!canSend;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Para retomar personalmente, abre «Retomar contacto personalmente» y envía la plantilla aprobada. Podrás escribir libremente cuando el paciente responda.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
+  const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=c.mode!=='human'||sending;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Último mensaje del paciente: '+date(c.lastInbound)+'. Puedes preparar tu respuesta aquí. Para enviarla, WhatsApp requiere primero una plantilla y la respuesta del paciente. Revisa las opciones de atención humana que aparecen arriba.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
   const fingerprint=JSON.stringify(data.messages);if(fingerprint===lastFingerprint)return;lastFingerprint=fingerprint;const box=$('messages');const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<100;const initial=!box.childNodes.length;box.replaceChildren();
   if(!data.messages.length){const p=document.createElement('p');p.textContent='No hay mensajes disponibles en Twilio para este paciente.';box.append(p);}
   for(const m of data.messages){const div=document.createElement('article');div.className='message'+(m.actor==='patient'?'':' out');const actor=document.createElement('span');actor.className='actor';actor.textContent=m.actor==='patient'?'Paciente':m.actor==='human'?'Dr. Jaime / Equipo':'Aura / Automatización';const p=document.createElement('p');p.textContent=m.body||'['+m.media+' archivo(s) recibido(s)]';const small=document.createElement('small');const statuses={queued:'En cola',sent:'Enviado',delivered:'Entregado',read:'Leído',failed:'Fallido',undelivered:'No entregado',received:'Recibido',sending:'Enviando'};small.textContent=date(m.time)+' · '+(statuses[m.status]||m.status)+(m.errorCode?' · Error '+m.errorCode:'');div.append(actor,p,small);for(let index=0;index<m.media;index++){const a=document.createElement('a');a.href='/api/inbox/media?sid='+encodeURIComponent(m.sid)+'&index='+index;a.textContent='Descargar archivo '+(index+1);a.style.display='block';div.append(a);}box.append(div);}if(atBottom||initial)box.scrollTop=box.scrollHeight;
@@ -90,6 +90,7 @@ function renderHumanContact(c,canSend){
  humanConversation=c;
  if(humanDraftPhone!==c.phone){humanDraftPhone=c.phone;humanRequestId=null;}
  $('human-contact').hidden=Boolean(canSend);
+ if(!canSend){$('human-contact').open=true;if(!humanTemplate&&!$('human-template-check').disabled)checkHumanTemplate();}
  const consent=c.commercial?.whatsappFollowupConsent?.evidence;
  const refused=c.commercial?.doNotContact||c.commercial?.followUp?.status==='declined';
  const awaiting=c.humanTemplate?.sid&&c.humanTemplate.baselineInboundSid===(c.lastInboundSid||null);
@@ -103,7 +104,7 @@ async function checkHumanTemplate(prepare=false){
  $('human-template-status').textContent='Plantilla de atención humana: '+(labels[humanTemplate.status]||humanTemplate.status);
  $('human-template-preview').textContent=humanTemplate.body;
  $('human-template-prepare').hidden=!['not_configured','unsubmitted'].includes(humanTemplate.status);
- if(humanConversation)renderHumanContact(humanConversation,!$('body').disabled);
+ if(humanConversation)renderHumanContact(humanConversation,!$('send').disabled);
  }catch(e){humanTemplate=null;$('human-template-send').disabled=true;notice(e.message);}finally{$('human-template-check').disabled=false;$('human-template-prepare').disabled=false;}
 }
 $('human-template-check').onclick=()=>checkHumanTemplate();

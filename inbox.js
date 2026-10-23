@@ -5,7 +5,7 @@ const workflow = require('./attention-workflow');
 const {isFullName,containsConversationWords,cleanNameHistory}=require('./aura-cro-policy');
 
 const PREFIX = 'thera-inbox-';
-const WINDOW = 24 * 60 * 60 * 1000;
+const {isOpen,reconcile}=require('./inbox-window');
 function phoneNumber(value) {
   const phone = String(value || '').replace(/^whatsapp:/, '');
   if (!/^\+[1-9]\d{7,14}$/.test(phone)) throw new Error('Número inválido');
@@ -156,10 +156,12 @@ function installInbox(app, env=process.env, clientOverride=null) {
     res.json({ok:true,recovered:patients.size});
   }));
   app.get('/api/inbox/messages',route(async(req,res)=>{
-    const phone=phoneNumber(req.query.phone);const doc=await store.ensure(phone);
+    const phone=phoneNumber(req.query.phone);
     const results=await Promise.all([client.messages.list({from:phone,to:from,limit:100}),client.messages.list({from,to:phone,limit:100})]);
+    const conversation=await reconcile(store,phone,results[0]);
+    const doc={data:conversation};
     const messages=results.flat().sort((a,b)=>a.dateCreated-b.dateCreated).map(m=>({sid:m.sid,body:m.body,status:m.status,errorCode:m.errorCode,time:m.dateCreated,media:Number(m.numMedia),actor:m.from===phone?'patient':(doc.data.humanSids||[]).includes(m.sid)?'human':'aura'}));
-    res.json({conversation:doc.data,messages,canSend:Date.now()-new Date(doc.data.lastInbound).getTime()<WINDOW});
+    res.json({conversation:doc.data,messages,canSend:isOpen(doc.data.lastInbound)});
   }));
   app.get('/api/inbox/media',route(async(req,res)=>{
     const sid=String(req.query.sid||'');const index=Number(req.query.index||0);
@@ -180,9 +182,13 @@ function installInbox(app, env=process.env, clientOverride=null) {
     const phone=phoneNumber(req.body.phone);const body=String(req.body.body||'').trim();const requestId=String(req.body.requestId||'');
     if(!body || body.length>1500 || !/^[a-zA-Z0-9-]{20,80}$/.test(requestId))return res.status(400).json({error:'Mensaje inválido (máximo 1500 caracteres).'});
     await locked(phone,async()=>{
-      const doc=(await store.ensure(phone)).data;
+      let doc=(await store.ensure(phone)).data;
       if(doc.mode!=='human')return res.status(409).json({error:'Toma la conversación antes de responder.'});
-      if(Date.now()-new Date(doc.lastInbound).getTime()>=WINDOW || !doc.lastInbound)return res.status(409).json({error:'Han pasado 24 horas. Se requiere una plantilla aprobada.'});
+      if(!isOpen(doc.lastInbound)){
+        doc=await reconcile(store,phone,await client.messages.list({from:phone,to:from,limit:10}));
+        if(doc.mode!=='human')return res.status(409).json({error:'Toma la conversación antes de responder.'});
+      }
+      if(!isOpen(doc.lastInbound))return res.status(409).json({error:'WhatsApp requiere una plantilla aprobada porque han pasado 24 horas desde el último mensaje del paciente.'});
       // Claim durable before sending: uncertain sends must never be automatically retried.
       const claim='thera-send-'+crypto.createHash('sha256').update(phone+requestId).digest('hex');
       try {await store.documents.create({uniqueName:claim,data:{phone,state:'pending'},ttl:172800});}

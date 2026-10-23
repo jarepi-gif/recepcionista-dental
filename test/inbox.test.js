@@ -32,7 +32,7 @@ test('Aura rechecks persisted human takeover immediately before replying',async(
   await inbox.store.mutate(phone,data=>({...data,mode:'aura'}));await inbox.respond({body:{From:phone}},res,'Respuesta de Aura');assert.match(xml,/Respuesta de Aura/);
 });
 test('human sends enforce window, takeover and durable deduplication',async()=>{
-  const fake=fakeClient();let sends=0;fake.client.messages={create:async()=>{sends++;return {sid:'SM'+'a'.repeat(32),status:'queued'};}};
+  const fake=fakeClient();let sends=0;fake.client.messages={list:async()=>[],create:async()=>{sends++;return {sid:'SM'+'a'.repeat(32),status:'queued'};}};
   const app=express();app.use(express.json());const inbox=installInbox(app,envForTest,fake.client);const phone='whatsapp:+525500000001';await inbox.store.inbound({From:phone,Body:'Hola'});
   const server=await new Promise((resolve,reject)=>{const instance=app.listen(0,'127.0.0.1',()=>resolve(instance));instance.on('error',reject);});
   try {const base='http://127.0.0.1:'+server.address().port+'/api/inbox/';const login=await fetch(base+'session',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://example.com'},body:JSON.stringify({password:envForTest.INBOX_SECRET})});
@@ -72,7 +72,7 @@ test('manual template requires human mode, consent and live approval; prevents d
 
 test('manual template never retries uncertain provider sends',async()=>{
  const {install,BODY,NAME}=require('../inbox-human-template'),fake=fakeClient(),store=new InboxStore(fake.client);let sends=0;
- const contents=()=>({approvalFetch:()=>({fetch:async()=>({whatsapp:{status:'approved'}})})});contents.list=async()=>[{sid:'HX'+'a'.repeat(32),friendlyName:NAME,types:{'twilio/text':{body:BODY}}}];fake.client.content={v1:{contents}};fake.client.messages={create:async()=>{sends++;throw new Error('timeout');}};
+ const contents=()=>({approvalFetch:()=>({fetch:async()=>({whatsapp:{status:'approved'}})})});contents.list=async()=>[{sid:'HX'+'a'.repeat(32),friendlyName:NAME,types:{'twilio/text':{body:BODY}}}];fake.client.content={v1:{contents}};fake.client.messages={list:async()=>[],create:async()=>{sends++;throw new Error('timeout');}};
  const phone='whatsapp:+525500000001';await store.mutate(phone,d=>({...d,mode:'human',lastInboundSid:'SMold',commercial:{whatsappFollowupConsent:{evidence:'Permiso'}}}));
  let handler;install({app:{get(){},post(path,fn){if(path.endsWith('/send'))handler=fn;}},route:fn=>fn,client:fake.client,store,from:'whatsapp:+525579113424',locked:async(_,fn)=>fn(),phoneNumber});
  const res={status(code){this.code=code;return this;},json(){}};
