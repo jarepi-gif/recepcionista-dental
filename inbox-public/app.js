@@ -102,7 +102,7 @@ async function checkHumanTemplate(prepare=false){
  try{humanTemplate=prepare?await post('human-template/prepare',{}):await api('human-template');
  const labels={approved:'Aprobada',pending:'Pendiente de aprobación',received:'Recibida para revisión',rejected:'Rechazada',unsubmitted:'Sin enviar a revisión',not_configured:'Sin configurar',paused:'Pausada',disabled:'Deshabilitada'};
  $('human-template-status').textContent=humanTemplate.source==='recovery'?'Plantilla de recuperación aprobada disponible para envío manual. El texto menciona a Aura, pero la conversación permanece a tu cargo.':'Plantilla de atención humana: '+(labels[humanTemplate.status]||humanTemplate.status);
- $('human-template-preview').textContent=humanTemplate.body;
+ $('human-template-preview').textContent='Plantilla: '+humanTemplate.body;
  $('human-template-prepare').hidden=!['not_configured','unsubmitted'].includes(humanTemplate.status);
  if(humanConversation)renderHumanContact(humanConversation,!$('send').disabled);
  }catch(e){humanTemplate=null;$('human-template-send').disabled=true;notice(e.message);}finally{$('human-template-check').disabled=false;$('human-template-prepare').disabled=false;}

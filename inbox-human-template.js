@@ -1,24 +1,14 @@
 'use strict';
 const crypto=require('node:crypto');
-const NAME='thera_human_followup_v1';
-const BODY='Hola, te saluda el equipo de Thera Dental Clinic. Retomamos tu consulta pendiente para atenderte personalmente por este chat. ¿Deseas que continuemos? Si prefieres no recibir seguimiento, responde NO.';
+const NAME='thera_human_contact_channel_v2';
+const BODY='Le parece bien que continuemos con la conversación por este medio o prefiere que continuemos vía telefónica?';
 let preparing;
 async function status(client,store=null){
  const rows=await client.content.v1.contents.list({limit:1000});
  const content=rows.find(c=>c.friendlyName===NAME&&c.types?.['twilio/text']?.body===BODY);
  let primary={status:'not_configured',body:BODY};
  if(content){let approval;try{approval=await client.content.v1.contents(content.sid).approvalFetch().fetch();}catch(e){if(e.status!==404)throw e;}primary={sid:content.sid,status:String(approval?.whatsapp?.status||'unsubmitted').toLowerCase(),body:BODY};}
- if(primary.status==='approved'||!store)return primary;
- // Reuse only the configured, exact recovery text, with current provider approval.
- try{
-  const settings=(await store.documents('thera-recovery-settings-v1').fetch()).data;
-  if(!/^HX[a-f0-9]{32}$/i.test(settings.contentSid||''))return primary;
-  const fallback=await client.content.v1.contents(settings.contentSid).fetch();
-  const body=fallback.types?.['twilio/text']?.body;
-  if(body!==require('./recovery').BODY)return primary;
-  const approved=await client.content.v1.contents(settings.contentSid).approvalFetch().fetch();
-  if(String(approved.whatsapp?.status).toLowerCase()==='approved')return {sid:settings.contentSid,status:'approved',body,source:'recovery',humanTemplateStatus:primary.status};
- }catch(e){if(e.status!==404)throw e;}
+
  return primary;
 }
 async function prepare(client){
