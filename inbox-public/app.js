@@ -32,7 +32,7 @@ async function refreshMessages(){
     if(phone===selected){const item=conversations.find(x=>x.phone===phone);if(item){item.lastReviewedInbound=c.lastReviewedInbound;if(item.attention)item.attention.unread=Date.parse(item.lastInbound)>Date.parse(c.lastReviewedInbound);}renderPatients();}
   }
   if(phone!==selected)return;
-  renderHumanContact(c,data.canSend);renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
+  renderAdOrigin(c);renderHumanContact(c,data.canSend);renderRecoveryCase(c);renderCommercial(c);$('patient-name').textContent=c.name||'Paciente';$('patient-phone').textContent=c.phone.replace('whatsapp:','');$('mode-badge').textContent=c.mode==='human'?'Atención humana':'Aura activa';$('mode-description').textContent=c.mode==='human'?'Aura está pausada. Tus respuestas salen desde el WhatsApp oficial.':'Aura responde automáticamente. Toma el control para atender al paciente.';$('take').hidden=c.mode==='human';$('resume').hidden=c.mode!=='human';
   const canSend=c.mode==='human'&&data.canSend&&!sending;$('body').disabled=c.mode!=='human'||sending;$('send').disabled=!canSend;$('body').placeholder=c.mode==='human'?'Escribe tu respuesta…':'Toma la conversación para responder';$('send-hint').textContent=!data.canSend?'Último mensaje del paciente: '+date(c.lastInbound)+'. Puedes preparar tu respuesta aquí. Para enviarla, WhatsApp requiere primero una plantilla y la respuesta del paciente. Revisa las opciones de atención humana que aparecen arriba.':c.mode==='human'?'Atención humana activa · Aura está pausada':'Toma la conversación para habilitar la respuesta manual.';
   const fingerprint=JSON.stringify(data.messages);if(fingerprint===lastFingerprint)return;lastFingerprint=fingerprint;const box=$('messages');const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<100;const initial=!box.childNodes.length;box.replaceChildren();
   if(!data.messages.length){const p=document.createElement('p');p.textContent='No hay mensajes disponibles en Twilio para este paciente.';box.append(p);}
@@ -135,3 +135,20 @@ $('phone-consent-apply').onclick=async()=>{
  try{const result=await post('phone-consent/apply',{...consentPreview,confirmed:true});$('phone-consent-results').textContent=result.updated+' contactos habilitados para atención humana. '+result.skipped+' omitidos. No se enviaron mensajes.\n'+result.contacts.map(c=>c.name+' (…'+c.phone.slice(-4)+')').join('\n');consentPreview=null;$('phone-consent-apply').hidden=true;await refresh();}
  catch(e){notice(e.message);}finally{busy=false;$('phone-consent-apply').disabled=false;}
 };
+
+function renderAdOrigin(conversation){
+ const box=$('ad-origin'),commercial=conversation.commercial||{},source=commercial.initialAdSource||commercial.source||{};
+ box.replaceChildren();
+ const title=document.createElement('strong');
+ title.textContent=source.verified&&source.adId?'Promocional que originó la conversación':'Promocional de origen: no identificado';box.append(title);
+ if(source.verified&&source.adId){
+  const headline=document.createElement('p');headline.textContent=source.headline||'Anuncio o publicación de Meta';box.append(headline);
+  if(source.body){const text=document.createElement('p');text.className='ad-copy';text.textContent=source.body;box.append(text);}
+  const evidence=document.createElement('small');evidence.textContent='Referencia recibida de WhatsApp · ID: '+source.adId+(source.receivedAt?' · '+date(source.receivedAt):'');box.append(evidence);
+  try{const url=new URL(source.url);if(['https:','http:'].includes(url.protocol)){const link=document.createElement('a');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver promocional original';box.append(link);}}catch{}
+ }else{
+  const text=document.createElement('p');text.textContent='No hay datos del promocional registrados para este chat. El saludo «¡Hola! Quiero más información» no identifica el anuncio.';box.append(text);
+  if(source.reference){const reference=document.createElement('small');reference.textContent='Referencia THERA recibida: '+source.reference+' · Promocional por verificar';box.append(reference);}
+ }
+ if(commercial.sourceNote){const note=document.createElement('small');note.textContent='Nota de origen registrada: '+commercial.sourceNote;box.append(note);}
+}

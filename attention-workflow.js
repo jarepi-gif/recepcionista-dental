@@ -47,7 +47,8 @@ function updateInbound(previous,body,history=[],now=new Date()){
  if(/\b(?:esto es una prueba|prueba tecnica|mensaje de prueba|test tecnico)\b/.test(n))c.classification='test';
  if(/\b(?:distribuidor autorizado|soy proveedor|ofrezco servicios|revision normativa ante cofepris|terminales punto de venta)\b/.test(n))c.classification='supplier';
  const attr=extractInboundAttribution(text);if(attr.intakeReference)c.source={...c.source,reference:attr.intakeReference};if(attr.intakeToken)c.source={...c.source,intakeToken:attr.intakeToken};
- if(body.ReferralSourceId){c.source={...c.source,channel:'meta_ads',verified:true,adId:String(body.ReferralSourceId).slice(0,100),body:String(body.ReferralBody||'').slice(0,3000),headline:String(body.ReferralHeadline||'').slice(0,500),url:String(body.ReferralSourceUrl||'').slice(0,1500),clickId:String(body.ReferralCtwaClid||'').slice(0,1000),evidence:'Twilio referral',receivedAt:now.toISOString()};}
+ if(!c.initialAdSource&&c.source?.verified&&c.source?.adId)c.initialAdSource={...c.source};
+ if(body.ReferralSourceId){c.source={...c.source,channel:'meta_ads',verified:true,adId:String(body.ReferralSourceId).slice(0,100),body:String(body.ReferralBody||'').slice(0,3000),headline:String(body.ReferralHeadline||'').slice(0,500),url:String(body.ReferralSourceUrl||'').slice(0,1500),clickId:String(body.ReferralCtwaClid||'').slice(0,1000),evidence:'Twilio referral',receivedAt:now.toISOString(),messageSid:String(body.MessageSid||'').slice(0,100),sourceType:String(body.ReferralSourceType||'').slice(0,50)};if(!c.initialAdSource)c.initialAdSource={...c.source};}
  const treatment=inboundTreatment(text);if(treatment!=='Por confirmar')c.need=treatment;
  const count=n.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|\d{1,2})\s+(?:dientes?|piezas?|muelas?|implantes?)\b/);
  if(count)c.teeth=({un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9})[count[1]]||Number(count[1]);
