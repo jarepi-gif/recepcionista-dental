@@ -97,19 +97,21 @@ function renderHumanContact(c,canSend){
  $('human-template-send').disabled=sending||c.mode!=='human'||!consent||refused||awaiting||humanTemplate?.status!=='approved';
  $('human-template-hint').textContent=refused?'Este contacto rechazó el seguimiento.':awaiting?'Plantilla ya enviada. Espera la respuesta del paciente; Aura sigue pausada.':c.mode!=='human'?'Pulsa Tomar conversación para atenderlo tú.':!consent?'Registra en Ficha comercial y seguimiento la evidencia del permiso recibido por WhatsApp.':humanTemplate?.status==='approved'?'Plantilla lista. Tú decides cuándo enviarla; Aura permanece pausada.':'Consulta o solicita la aprobación de la plantilla.';
 }
-async function checkHumanTemplate(prepare=false){
+async function checkHumanTemplate(prepare=false,retry=false){
  $('human-template-check').disabled=true;$('human-template-prepare').disabled=true;
- try{humanTemplate=prepare?await post('human-template/prepare',{}):await api('human-template');
+ try{humanTemplate=prepare?await post('human-template/prepare',{retry}):await api('human-template');
  const labels={approved:'Aprobada',pending:'Pendiente de aprobación',received:'Recibida para revisión',rejected:'Rechazada',unsubmitted:'Sin enviar a revisión',not_configured:'Sin configurar',paused:'Pausada',disabled:'Deshabilitada'};
  $('human-template-status').textContent=humanTemplate.source==='recovery'?'Plantilla de recuperación aprobada disponible para envío manual. El texto menciona a Aura, pero la conversación permanece a tu cargo.':'Plantilla de atención humana: '+(labels[humanTemplate.status]||humanTemplate.status);
  $('human-template-preview').textContent='Plantilla: '+humanTemplate.body;
- $('human-template-prepare').hidden=!['not_configured','unsubmitted'].includes(humanTemplate.status);
+ $('human-template-prepare').hidden=!['not_configured','unsubmitted','pending','received','rejected'].includes(humanTemplate.status);
+ $('human-template-prepare').textContent=['pending','received','rejected'].includes(humanTemplate.status)?'Volver a solicitar aprobación':'Solicitar aprobación de plantilla';
+ if(prepare){const request=humanTemplate.approvalRequest;$('human-template-request').textContent=request?(request.accepted?'El proveedor aceptó la solicitud de revisión. Aún requiere aprobación para enviar.':'El proveedor no aceptó el reintento'+(request.providerCode?' ('+request.providerCode+')':'')+': '+request.reason):'La plantilla conserva su estado actual; no se envió otra solicitud.';}
  if(humanConversation)renderHumanContact(humanConversation,!$('send').disabled);
  }catch(e){humanTemplate=null;$('human-template-send').disabled=true;notice(e.message);}finally{$('human-template-check').disabled=false;$('human-template-prepare').disabled=false;}
 }
 $('human-template-check').onclick=()=>checkHumanTemplate();
 $('human-contact').ontoggle=()=>{if($('human-contact').open&&!humanTemplate)checkHumanTemplate();};
-$('human-template-prepare').onclick=()=>checkHumanTemplate(true);
+$('human-template-prepare').onclick=()=>checkHumanTemplate(true,['pending','received','rejected'].includes(humanTemplate?.status));
 $('human-template-send').onclick=async()=>{
  if(sending||!selected||$('human-template-send').disabled)return;
  const phone=selected;

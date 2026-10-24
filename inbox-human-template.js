@@ -11,12 +11,21 @@ async function status(client,store=null){
 
  return primary;
 }
-async function prepare(client){
+async function prepare(client,retry=false){
  if(preparing)return preparing;
  preparing=(async()=>{
   let current=await status(client);
   if(!current.sid){const content=await client.content.v1.contents.create({friendly_name:NAME,language:'es_MX',types:{'twilio/text':{body:BODY}}});current={sid:content.sid,status:'unsubmitted'};}
-  if(current.status==='unsubmitted')await client.content.v1.contents(current.sid).approvalCreate.create({name:NAME,category:'MARKETING'});
+  if(current.status==='unsubmitted'||(retry&&['pending','received','rejected'].includes(current.status))){
+   const attemptedAt=new Date().toISOString();
+   try{
+    const approval=await client.content.v1.contents(current.sid).approvalCreate.create({name:NAME,category:'MARKETING'});
+    return {...await status(client),approvalRequest:{accepted:true,attemptedAt,providerStatus:approval.status}};
+   }catch(e){
+    if(!retry)throw e;
+    return {...await status(client),approvalRequest:{accepted:false,attemptedAt,providerCode:e.code||e.status||null,reason:String(e.message||'El proveedor no aceptó el reintento.').slice(0,500)}};
+   }
+  }
   return status(client);
  })();try{return await preparing;}finally{preparing=null;}
 }
@@ -29,7 +38,7 @@ function blocked(data){
 }
 function install({app,route,client,store,from,locked,phoneNumber}){
  app.get('/api/inbox/human-template',route(async(req,res)=>res.json(await status(client,store))));
- app.post('/api/inbox/human-template/prepare',route(async(req,res)=>res.json(await prepare(client))));
+ app.post('/api/inbox/human-template/prepare',route(async(req,res)=>res.json(await prepare(client,req.body.retry===true))));
  app.post('/api/inbox/human-template/send',route(async(req,res)=>{
   const phone=phoneNumber(req.body.phone),requestId=String(req.body.requestId||'');
   if(!/^[a-zA-Z0-9-]{20,80}$/.test(requestId))return res.status(400).json({error:'Identificador de envío inválido.'});

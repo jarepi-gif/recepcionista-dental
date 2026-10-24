@@ -90,3 +90,15 @@ test('manual contact never substitutes recovery text for the requested human tem
  contents.list=async()=>[];const unknownStore={documents:()=>({fetch:async()=>{throw {status:404};}})};
  assert.equal((await status(client,unknownStore)).status,'not_configured');
 });
+
+test('explicit approval retry reuses exact template and reports provider refusal honestly',async()=>{
+ const {prepare,BODY,NAME}=require('../inbox-human-template');let approval='pending',requests=0,fail=false;
+ const sid='HX'+'d'.repeat(32);
+ const contents=id=>{assert.equal(id,sid);return {approvalFetch:()=>({fetch:async()=>({whatsapp:{status:approval}})}),approvalCreate:{create:async input=>{requests++;assert.deepEqual(input,{name:NAME,category:'MARKETING'});if(fail)throw Object.assign(new Error('Already submitted'),{code:63040});return {status:'received'};}}};};
+ contents.list=async()=>[{sid,friendlyName:NAME,types:{'twilio/text':{body:BODY}}}];contents.create=async()=>{throw new Error('Must not duplicate template');};
+ const client={content:{v1:{contents}}};
+ await prepare(client);assert.equal(requests,0);
+ let result=await prepare(client,true);assert.equal(requests,1);assert.equal(result.approvalRequest.accepted,true);assert.equal(result.status,'pending');assert.equal(result.body,BODY);
+ fail=true;result=await prepare(client,true);assert.equal(requests,2);assert.equal(result.approvalRequest.accepted,false);assert.equal(result.approvalRequest.providerCode,63040);assert.equal(result.status,'pending');
+ approval='approved';result=await prepare(client,true);assert.equal(requests,2);assert.equal(result.status,'approved');assert.equal(result.approvalRequest,undefined);
+});
