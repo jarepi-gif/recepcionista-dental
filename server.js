@@ -29,6 +29,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 const inbox = installInbox(app);
+require('./inbox-consent-confirmation-20261026').run(inbox).catch(error=>console.error('Phone consent correction failed:',error.code||error.status||'error'));
 async function replyAura(req, res, text) {
   if (inbox.enabled && !req.auraDiagnostic) return inbox.respond(req, res, keepOfficialChat(text));
   const response = new twilio.twiml.MessagingResponse();
