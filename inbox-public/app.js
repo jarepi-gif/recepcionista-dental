@@ -85,28 +85,28 @@ $('recovery-recent').onclick=()=>recoveryAction('recent');
 $('recovery-run').onclick=()=>recoveryAction('run');
 $('recovery-enroll').onclick=()=>selected&&recoveryAction('enroll',{phone:selected});
 
-let humanTemplate=null,humanConversation=null,humanRequestId=null,humanDraftPhone=null;
+let humanTemplate=null,humanConversation=null,humanRequestId=null,humanDraftPhone=null,humanTemplateCheckedAt=0,humanCanSend=false;
 function renderHumanContact(c,canSend){
- humanConversation=c;
- if(humanDraftPhone!==c.phone){humanDraftPhone=c.phone;humanRequestId=null;}
+ humanConversation=c;humanCanSend=canSend;
+ if(humanDraftPhone!==c.phone){humanDraftPhone=c.phone;humanRequestId=null;humanTemplateCheckedAt=0;$('human-template-request').textContent='';}
  $('human-contact').hidden=Boolean(canSend);
- if(!canSend){$('human-contact').open=true;if(!humanTemplate&&!$('human-template-check').disabled)checkHumanTemplate();}
+ if(!canSend){$('human-contact').open=true;if((!humanTemplate||Date.now()-humanTemplateCheckedAt>=30000)&&!$('human-template-check').disabled)checkHumanTemplate();}
  const consent=c.commercial?.whatsappFollowupConsent?.evidence;
  const refused=c.commercial?.doNotContact||c.commercial?.followUp?.status==='declined';
  const awaiting=c.humanTemplate?.sid&&c.humanTemplate.baselineInboundSid===(c.lastInboundSid||null);
  $('human-template-send').disabled=sending||c.mode!=='human'||!consent||refused||awaiting||humanTemplate?.status!=='approved';
- $('human-template-hint').textContent=refused?'Este contacto rechazó el seguimiento.':awaiting?'Plantilla ya enviada. Espera la respuesta del paciente; Aura sigue pausada.':c.mode!=='human'?'Pulsa Tomar conversación para atenderlo tú.':!consent?'Registra en Ficha comercial y seguimiento la evidencia del permiso recibido por WhatsApp.':humanTemplate?.status==='approved'?'Plantilla lista. Tú decides cuándo enviarla; Aura permanece pausada.':'Consulta o solicita la aprobación de la plantilla.';
+ $('human-template-hint').textContent=refused?'Este contacto rechazó el seguimiento.':awaiting?'Plantilla ya enviada. Espera la respuesta del paciente; Aura sigue pausada.':c.mode!=='human'?'Pulsa Tomar conversación para atenderlo tú.':!consent?'Falta el permiso de este contacto. En Ficha comercial y seguimiento registra la evidencia real del permiso para continuar por WhatsApp, recibido por llamada telefónica o por mensaje.':humanTemplate?.status==='approved'?'Plantilla aprobada y lista para envío manual. Pulsa Enviar plantilla de atención humana.':'La aprobación se consulta automáticamente; también puedes pulsar Consultar plantilla.';
 }
 async function checkHumanTemplate(prepare=false,retry=false){
  $('human-template-check').disabled=true;$('human-template-prepare').disabled=true;
- try{humanTemplate=prepare?await post('human-template/prepare',{retry}):await api('human-template');
+ try{humanTemplate=prepare?await post('human-template/prepare',{retry}):await api('human-template');humanTemplateCheckedAt=Date.now();
  const labels={approved:'Aprobada',pending:'Pendiente de aprobación',received:'Recibida para revisión',rejected:'Rechazada',unsubmitted:'Sin enviar a revisión',not_configured:'Sin configurar',paused:'Pausada',disabled:'Deshabilitada'};
  $('human-template-status').textContent=humanTemplate.source==='recovery'?'Plantilla de recuperación aprobada disponible para envío manual. El texto menciona a Aura, pero la conversación permanece a tu cargo.':'Plantilla de atención humana: '+(labels[humanTemplate.status]||humanTemplate.status);
  $('human-template-preview').textContent='Plantilla: '+humanTemplate.body;
  $('human-template-prepare').hidden=!['not_configured','unsubmitted','pending','received','rejected'].includes(humanTemplate.status);
  $('human-template-prepare').textContent=['pending','received','rejected'].includes(humanTemplate.status)?'Volver a solicitar aprobación':'Solicitar aprobación de plantilla';
  if(prepare){const request=humanTemplate.approvalRequest;$('human-template-request').textContent=request?(request.accepted?'El proveedor aceptó la solicitud de revisión. Aún requiere aprobación para enviar.':'El proveedor no aceptó el reintento'+(request.providerCode?' ('+request.providerCode+')':'')+': '+request.reason):'La plantilla conserva su estado actual; no se envió otra solicitud.';}
- if(humanConversation)renderHumanContact(humanConversation,!$('send').disabled);
+ if(humanConversation)renderHumanContact(humanConversation,humanCanSend);
  }catch(e){humanTemplate=null;$('human-template-send').disabled=true;notice(e.message);}finally{$('human-template-check').disabled=false;$('human-template-prepare').disabled=false;}
 }
 $('human-template-check').onclick=()=>checkHumanTemplate();
