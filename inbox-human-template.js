@@ -29,11 +29,11 @@ async function prepare(client,retry=false){
   return status(client);
  })();try{return await preparing;}finally{preparing=null;}
 }
-function blocked(data){
+function blocked(data,{consentConfirmed=false}={}){
  if(data.mode!=='human')return 'Toma la conversación antes de retomar el contacto.';
  const c=data.commercial||{};
  if(c.doNotContact||c.followUp?.status==='declined')return 'Este contacto rechazó el seguimiento.';
- if(!c.whatsappFollowupConsent?.evidence)return 'Registra en la ficha la evidencia del permiso recibido para seguimiento por WhatsApp.';
+ if(!c.whatsappFollowupConsent?.evidence&&!(c.manualTemplateAccess?.enabled===true&&consentConfirmed===true))return 'Confirma el permiso del contacto al enviar o registra su evidencia en la ficha.';
  return null;
 }
 function install({app,route,client,store,from,locked,phoneNumber}){
@@ -43,12 +43,20 @@ function install({app,route,client,store,from,locked,phoneNumber}){
   const phone=phoneNumber(req.body.phone),requestId=String(req.body.requestId||'');
   if(!/^[a-zA-Z0-9-]{20,80}$/.test(requestId))return res.status(400).json({error:'Identificador de envío inválido.'});
   await locked(phone,async()=>{
-   let data=(await store.ensure(phone)).data;let reason=blocked(data);
+   const consentOptions={consentConfirmed:req.body.consentConfirmed===true};
+   let data=(await store.ensure(phone)).data;let reason=blocked(data,consentOptions);
    if(reason)return res.status(409).json({error:reason});
    const template=await status(client,store);
    if(template.status!=='approved')return res.status(409).json({error:'La plantilla de atención humana todavía no está aprobada. Estado: '+template.status});
-   data=(await store.ensure(phone)).data;reason=blocked(data);
+   data=(await store.ensure(phone)).data;reason=blocked(data,consentOptions);
    if(reason)return res.status(409).json({error:reason});
+   if(!data.commercial?.whatsappFollowupConsent?.evidence){
+    data=await store.mutate(phone,d=>{
+     const reason=blocked(d,consentOptions);if(reason)throw new Error(reason);
+     if(d.commercial?.whatsappFollowupConsent?.evidence)return d;
+     return {...d,commercial:{...d.commercial,whatsappFollowupConsent:{evidence:'El responsable confirmó el permiso del contacto en la confirmación del envío manual de esta plantilla.',source:'owner_confirmed_at_manual_send',recordedAt:new Date().toISOString(),recordedBy:'Dr. Jaime Reyes',scope:'Continuar esta consulta por WhatsApp',requestId}}};
+    });
+   }
    // One attempt per inbound message, durable even when the provider response is uncertain.
    const claim='thera-human-template-'+crypto.createHash('sha256').update(phone+'|'+String(data.lastInboundSid||data.lastInbound||'none')).digest('hex');
    try{await store.documents.create({uniqueName:claim,data:{phone,state:'pending',requestId,contentSid:template.sid}});}
@@ -61,3 +69,4 @@ function install({app,route,client,store,from,locked,phoneNumber}){
  }));
 }
 module.exports={install,status,prepare,blocked,NAME,BODY};
+

@@ -92,10 +92,11 @@ function renderHumanContact(c,canSend){
  $('human-contact').hidden=Boolean(canSend);
  if(!canSend){$('human-contact').open=true;if((!humanTemplate||Date.now()-humanTemplateCheckedAt>=30000)&&!$('human-template-check').disabled)checkHumanTemplate();}
  const consent=c.commercial?.whatsappFollowupConsent?.evidence;
+ const manualAccess=c.commercial?.manualTemplateAccess?.enabled===true;
  const refused=c.commercial?.doNotContact||c.commercial?.followUp?.status==='declined';
  const awaiting=c.humanTemplate?.sid&&c.humanTemplate.baselineInboundSid===(c.lastInboundSid||null);
- $('human-template-send').disabled=sending||c.mode!=='human'||!consent||refused||awaiting||humanTemplate?.status!=='approved';
- $('human-template-hint').textContent=refused?'Este contacto rechazó el seguimiento.':awaiting?'Plantilla ya enviada. Espera la respuesta del paciente; Aura sigue pausada.':c.mode!=='human'?'Pulsa Tomar conversación para atenderlo tú.':!consent?'Falta el permiso de este contacto. En Ficha comercial y seguimiento registra la evidencia real del permiso para continuar por WhatsApp, recibido por llamada telefónica o por mensaje.':humanTemplate?.status==='approved'?'Plantilla aprobada y lista para envío manual. Pulsa Enviar plantilla de atención humana.':'La aprobación se consulta automáticamente; también puedes pulsar Consultar plantilla.';
+ $('human-template-send').disabled=sending||c.mode!=='human'||(!consent&&!manualAccess)||refused||awaiting||humanTemplate?.status!=='approved';
+ $('human-template-hint').textContent=refused?'Este contacto rechazó el seguimiento.':awaiting?'Plantilla ya enviada. Espera la respuesta del paciente; Aura sigue pausada.':c.mode!=='human'?'Pulsa Tomar conversación para atenderlo tú.':!consent&&!manualAccess?'Falta el permiso de este contacto. En Ficha comercial y seguimiento registra la evidencia real del permiso para continuar por WhatsApp, recibido por llamada telefónica o por mensaje.':humanTemplate?.status==='approved'?(!consent&&manualAccess?'Envío manual habilitado. Al enviar confirmarás que el contacto autorizó continuar por WhatsApp.':'Plantilla aprobada y lista para envío manual. Pulsa Enviar plantilla de atención humana.'):'La aprobación se consulta automáticamente; también puedes pulsar Consultar plantilla.';
 }
 async function checkHumanTemplate(prepare=false,retry=false){
  $('human-template-check').disabled=true;$('human-template-prepare').disabled=true;
@@ -115,9 +116,10 @@ $('human-template-prepare').onclick=()=>checkHumanTemplate(true,['pending','rece
 $('human-template-send').onclick=async()=>{
  if(sending||!selected||$('human-template-send').disabled)return;
  const phone=selected;
- if(!confirm('¿Enviar este mensaje de atención humana a '+$('patient-name').textContent+' ('+$('patient-phone').textContent+')?\n\n'+humanTemplate.body))return;
+ const needsConsentConfirmation=!humanConversation?.commercial?.whatsappFollowupConsent?.evidence;
+ if(!confirm((needsConsentConfirmation?'Al continuar confirmas que este contacto autorizó el seguimiento por WhatsApp.\n\n':'')+'¿Enviar este mensaje de atención humana a '+$('patient-name').textContent+' ('+$('patient-phone').textContent+')?\n\n'+humanTemplate.body))return;
  sending=true;$('human-template-send').disabled=true;humanRequestId=humanRequestId||crypto.randomUUID();
- try{const result=await post('human-template/send',{phone,requestId:humanRequestId});humanRequestId=null;notice('Plantilla aceptada por WhatsApp ('+result.status+'). Aura sigue pausada; espera la respuesta para escribir libremente.');}
+ try{const result=await post('human-template/send',{phone,requestId:humanRequestId,consentConfirmed:needsConsentConfirmation});humanRequestId=null;notice('Plantilla aceptada por WhatsApp ('+result.status+'). Aura sigue pausada; espera la respuesta para escribir libremente.');}
  catch(e){notice(e.message);}finally{sending=false;await refreshMessages().catch(()=>{});}
 };
 
@@ -154,3 +156,4 @@ function renderAdOrigin(conversation){
  }
  if(commercial.sourceNote){const note=document.createElement('small');note.textContent='Nota de origen registrada: '+commercial.sourceNote;box.append(note);}
 }
+

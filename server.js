@@ -29,6 +29,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 const inbox = installInbox(app);
+require('./inbox-manual-access-20261102').run(inbox).catch(error=>console.error('Manual template access failed:',error.code||error.status||'error'));
 require('./inbox-consent-confirmation-20261026').run(inbox).catch(error=>console.error('Phone consent correction failed:',error.code||error.status||'error'));
 require('./inbox-consent-range-20261026').run(inbox).catch(error=>console.error('Phone consent range failed:',error.code||error.status||'error'));
 async function replyAura(req, res, text) {
@@ -397,3 +398,4 @@ app.get('/health', (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log('Servidor corriendo en puerto 3000');
 });
+
