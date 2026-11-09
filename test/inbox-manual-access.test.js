@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
-const {apply,ID,AUDIT,START,END,inRange}=require('../inbox-manual-access-20261102');
+const {apply,ID,AUDIT,START,END,NOVEMBER_7_BATCH,inRange}=require('../inbox-manual-access-20261102');
 const {blocked,install,NAME,BODY}=require('../inbox-human-template');
 const key=p=>'thera-inbox-'+crypto.createHash('sha256').update(p).digest('hex').slice(0,32);
 const access={manualTemplateAccess:{enabled:true}};
@@ -14,17 +14,18 @@ test('explicit permission at manual send is scoped to enabled contacts and keeps
  for(const commercial of [{...access,doNotContact:true},{...access,followUp:{status:'declined'}}])assert.ok(blocked({mode:'human',commercial},{consentConfirmed:true}));
  assert.ok(blocked({...d,mode:'aura'},{consentConfirmed:true}));
 });
-test('range only enables present contacts from October 31 through November 2 without inventing consent',async()=>{
- assert.equal(inRange({lastInbound:START}),true);assert.equal(inRange({lastInbound:'2026-11-02T23:59:59-06:00'}),true);
- for(const lastInbound of ['2026-10-30T23:59:59-06:00',END,'invalid'])assert.equal(inRange({lastInbound}),false);
- const rows=[{phone:'one',mode:'aura',lastInbound:START,commercial:{},recovery:{status:'queued'}},{phone:'two',mode:'human',lastInbound:START,commercial:{whatsappFollowupConsent:{evidence:'Real previous permission'}}},{phone:'excluded',lastInbound:START,commercial:{doNotContact:true}},{phone:'older',lastInbound:'2026-10-30',mode:'aura'}];
+for(const [batch,older,last] of [[undefined,'2026-10-30T23:59:59-06:00','2026-11-02T23:59:59-06:00'],[NOVEMBER_7_BATCH,'2026-11-06T23:59:59-06:00','2026-11-09T23:59:59-06:00']])test('range only enables present contacts without inventing consent: '+(batch?.id||ID),async()=>{
+ const start=batch?.start||START,end=batch?.end||END,audit=batch?'thera-manual-access-batch-'+batch.id:AUDIT;
+ assert.equal(inRange({lastInbound:start},batch),true);assert.equal(inRange({lastInbound:last},batch),true);
+ for(const lastInbound of [older,end,'invalid'])assert.equal(inRange({lastInbound},batch),false);
+ const rows=[{phone:'one',mode:'aura',lastInbound:start,commercial:{},recovery:{status:'queued'}},{phone:'two',mode:'human',lastInbound:last,commercial:{whatsappFollowupConsent:{evidence:'Real previous permission'}}},{phone:'excluded',lastInbound:start,commercial:{doNotContact:true}},{phone:'older',lastInbound:older,mode:'aura'},{phone:'later',lastInbound:end,mode:'aura'}];
  const records=new Map(rows.map(data=>[key(data.phone),{revision:'1',data:structuredClone(data)}]));let writes=0;
  const documents=n=>({fetch:async()=>{if(!records.has(n))throw {status:404};return structuredClone(records.get(n));},update:async({data})=>{writes++;const r={revision:'2',data:structuredClone(data)};records.set(n,r);return r;}});
  documents.create=async({uniqueName,data})=>{const r={revision:'1',data};records.set(uniqueName,r);return r;};
- const store={documents,list:async()=>rows,client:templateClient()};const result=await apply(store);assert.equal(result.matched,3);assert.equal(result.updated,2);assert.equal(result.manualReady,2);assert.equal(result.excluded,1);assert.equal(result.patientMessagesSent,0);
+ const store={documents,list:async()=>rows,client:templateClient()};const result=await apply(store,new Date(),batch);assert.equal(result.matched,3);assert.equal(result.updated,2);assert.equal(result.manualReady,2);assert.equal(result.excluded,1);assert.equal(result.patientMessagesSent,0);
  const one=records.get(key('one')).data;assert.equal(one.mode,'human');assert.equal(one.recovery.status,'human');assert.equal(one.commercial.manualTemplateAccess.enabled,true);assert.equal(one.commercial.whatsappFollowupConsent,undefined);assert.equal(records.get(key('two')).data.commercial.whatsappFollowupConsent.evidence,'Real previous permission');assert.equal(records.get(key('older')).data.mode,'aura');
  const before=writes;delete one.commercial.manualTemplateAccess;records.get(key('one')).data=one;
- const again=await apply(store);assert.equal(again.previouslyCompleted,true);assert.equal(writes,before);assert.equal(records.get(key('one')).data.commercial.manualTemplateAccess,undefined);assert.equal(records.get(AUDIT).data.targets.length,3);
+ const again=await apply(store,new Date(),batch);assert.equal(again.previouslyCompleted,true);assert.equal(writes,before);assert.equal(records.get(key('one')).data.commercial.manualTemplateAccess,undefined);assert.equal(records.get(audit).data.targets.length,3);assert.equal(records.get(key('later')).data.mode,'aura');
 });
 test('server only records permission after explicit approved manual request and prevents repeat sends',async()=>{
  let row={phone:'+525500000001',mode:'human',lastInboundSid:'SM1',commercial:structuredClone(access)},sends=0,updates=0;
