@@ -92,7 +92,7 @@ function renderHumanContact(c,canSend){
  $('human-contact').hidden=Boolean(canSend);
  if(!canSend){$('human-contact').open=true;if((!humanTemplate||Date.now()-humanTemplateCheckedAt>=30000)&&!$('human-template-check').disabled)checkHumanTemplate();}
  const consent=c.commercial?.whatsappFollowupConsent?.evidence;
- const manualAccess=c.commercial?.manualTemplateAccess?.enabled===true;
+ const manualAccess=TheraManualAccess.allowed(c);
  const refused=c.commercial?.doNotContact||c.commercial?.followUp?.status==='declined';
  const awaiting=c.humanTemplate?.sid&&c.humanTemplate.baselineInboundSid===(c.lastInboundSid||null);
  $('human-template-send').disabled=sending||c.mode!=='human'||(!consent&&!manualAccess)||refused||awaiting||humanTemplate?.status!=='approved';

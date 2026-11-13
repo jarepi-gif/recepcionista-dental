@@ -27,8 +27,8 @@ for(const [batch,older,last] of [[undefined,'2026-10-30T23:59:59-06:00','2026-11
  const before=writes;delete one.commercial.manualTemplateAccess;records.get(key('one')).data=one;
  const again=await apply(store,new Date(),batch);assert.equal(again.previouslyCompleted,true);assert.equal(writes,before);assert.equal(records.get(key('one')).data.commercial.manualTemplateAccess,undefined);assert.equal(records.get(audit).data.targets.length,3);assert.equal(records.get(key('later')).data.mode,'aura');
 });
-test('server only records permission after explicit approved manual request and prevents repeat sends',async()=>{
- let row={phone:'+525500000001',mode:'human',lastInboundSid:'SM1',commercial:structuredClone(access)},sends=0,updates=0;
+for(const scope of [{commercial:structuredClone(access)},{lastInbound:'2026-11-14T12:00:00-06:00',commercial:{}}])test('server records permission only for explicit approved request: '+(scope.lastInbound||'prior access'),async()=>{
+ let row={phone:'+525500000001',mode:'human',lastInboundSid:'SM1',...scope},sends=0,updates=0;
  const client=templateClient();client.messages={create:async()=>{sends++;return {sid:'SMsent',status:'queued'};}};
  const claims=new Map();const documents=k=>({update:async({data})=>claims.set(k,data)});documents.create=async({uniqueName,data})=>{if(claims.has(uniqueName))throw {status:409};claims.set(uniqueName,data);};
  const store={documents,ensure:async()=>({data:structuredClone(row)}),mutate:async(_,fn)=>{updates++;row=fn(row);return row;}};
@@ -45,12 +45,12 @@ test('unapproved provider state never records a manual permission confirmation',
  const res={status(n){this.code=n;return this;},json(){}};
  await handler({body:{phone:'test',requestId:'a'.repeat(32),consentConfirmed:true}},res);assert.equal(res.code,409);assert.equal(writes,0);assert.equal(sends,0);
 });
-test('manual access UI asks permission in confirmation and does nothing when cancelled',async()=>{
+for(const scope of [{commercial:access},{lastInbound:'2026-11-14T12:00:00-06:00',commercial:{}}])test('manual access UI requires confirmation: '+(scope.lastInbound||'prior access'),async()=>{
  const vm=require('node:vm'),fs=require('node:fs');const source=fs.readFileSync(require.resolve('../inbox-public/app.js'),'utf8');
  const code=source.slice(source.indexOf('let humanTemplate='),source.indexOf("$('attention-filter').onchange"));
  const elements=new Map(),$=id=>{if(!elements.has(id))elements.set(id,{disabled:false,hidden:false,textContent:''});return elements.get(id);};
- let confirmed=false,posts=0,prompt='';const c={phone:'test',mode:'human',commercial:access};
- const context=vm.createContext({$,sending:false,selected:'test',Date,api:async()=>({status:'approved',body:BODY}),crypto:{randomUUID:()=> 'a'.repeat(32)},post:async(_,data)=>{posts++;assert.equal(data.consentConfirmed,true);return {status:'queued'};},confirm:text=>{prompt=text;return confirmed;},notice(){},refreshMessages:async()=>{}});
+ let confirmed=false,posts=0,prompt='';const c={phone:'test',mode:'human',...scope};
+ const context=vm.createContext({TheraManualAccess:require('../inbox-public/manual-template-policy'),$,sending:false,selected:'test',Date,api:async()=>({status:'approved',body:BODY}),crypto:{randomUUID:()=> 'a'.repeat(32)},post:async(_,data)=>{posts++;assert.equal(data.consentConfirmed,true);return {status:'queued'};},confirm:text=>{prompt=text;return confirmed;},notice(){},refreshMessages:async()=>{}});
  vm.runInContext(code,context);context.renderHumanContact(c,false);await new Promise(resolve=>setImmediate(resolve));assert.equal($('human-template-send').disabled,false);assert.match($('human-template-hint').textContent,/confirmarás/);
  await $('human-template-send').onclick();assert.match(prompt,/autorizó/);assert.equal(posts,0);
  confirmed=true;await $('human-template-send').onclick();assert.equal(posts,1);

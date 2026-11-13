@@ -1,5 +1,6 @@
 'use strict';
 const crypto=require('node:crypto');
+const manualAccess=require('./inbox-public/manual-template-policy');
 const NAME='thera_human_contact_channel_v2';
 const BODY='Le parece bien que continuemos con la conversación por este medio o prefiere que continuemos vía telefónica?';
 let preparing;
@@ -33,7 +34,7 @@ function blocked(data,{consentConfirmed=false}={}){
  if(data.mode!=='human')return 'Toma la conversación antes de retomar el contacto.';
  const c=data.commercial||{};
  if(c.doNotContact||c.followUp?.status==='declined')return 'Este contacto rechazó el seguimiento.';
- if(!c.whatsappFollowupConsent?.evidence&&!(c.manualTemplateAccess?.enabled===true&&consentConfirmed===true))return 'Confirma el permiso del contacto al enviar o registra su evidencia en la ficha.';
+ if(!c.whatsappFollowupConsent?.evidence&&!(manualAccess.allowed(data)&&consentConfirmed===true))return 'Confirma el permiso del contacto al enviar o registra su evidencia en la ficha.';
  return null;
 }
 function install({app,route,client,store,from,locked,phoneNumber}){
