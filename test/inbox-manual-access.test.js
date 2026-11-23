@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),crypto=require('node:crypto');
-const {apply,ID,AUDIT,START,END,NOVEMBER_7_BATCH,inRange}=require('../inbox-manual-access-20261102');
+const {apply,ID,AUDIT,START,END,NOVEMBER_7_BATCH,NOVEMBER_20_BATCH,inRange}=require('../inbox-manual-access-20261102');
 const {blocked,install,NAME,BODY}=require('../inbox-human-template');
 const key=p=>'thera-inbox-'+crypto.createHash('sha256').update(p).digest('hex').slice(0,32);
 const access={manualTemplateAccess:{enabled:true}};
@@ -14,7 +14,7 @@ test('explicit permission at manual send is scoped to enabled contacts and keeps
  for(const commercial of [{...access,doNotContact:true},{...access,followUp:{status:'declined'}}])assert.ok(blocked({mode:'human',commercial},{consentConfirmed:true}));
  assert.ok(blocked({...d,mode:'aura'},{consentConfirmed:true}));
 });
-for(const [batch,older,last] of [[undefined,'2026-10-30T23:59:59-06:00','2026-11-02T23:59:59-06:00'],[NOVEMBER_7_BATCH,'2026-11-06T23:59:59-06:00','2026-11-09T23:59:59-06:00']])test('range only enables present contacts without inventing consent: '+(batch?.id||ID),async()=>{
+for(const [batch,older,last] of [[undefined,'2026-10-30T23:59:59-06:00','2026-11-02T23:59:59-06:00'],[NOVEMBER_7_BATCH,'2026-11-06T23:59:59-06:00','2026-11-09T23:59:59-06:00'],[NOVEMBER_20_BATCH,'2026-11-19T23:59:59-06:00','2026-11-22T23:59:59-06:00']])test('range only enables present contacts without inventing consent: '+(batch?.id||ID),async()=>{
  const start=batch?.start||START,end=batch?.end||END,audit=batch?'thera-manual-access-batch-'+batch.id:AUDIT;
  assert.equal(inRange({lastInbound:start},batch),true);assert.equal(inRange({lastInbound:last},batch),true);
  for(const lastInbound of [older,end,'invalid'])assert.equal(inRange({lastInbound},batch),false);

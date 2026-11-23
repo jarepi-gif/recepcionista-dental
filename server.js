@@ -32,6 +32,7 @@ const inbox = installInbox(app);
 const manualTemplateAccess = require('./inbox-manual-access-20261102');
 manualTemplateAccess.run(inbox).catch(error=>console.error('Manual template access failed:',error.code||error.status||'error'));
 manualTemplateAccess.run(inbox,console.log,manualTemplateAccess.NOVEMBER_7_BATCH).catch(error=>console.error('Manual template access November 7 failed:',error.code||error.status||'error'));
+manualTemplateAccess.run(inbox,console.log,manualTemplateAccess.NOVEMBER_20_BATCH).catch(error=>console.error('Manual template access November 20 failed:',error.code||error.status||'error'));
 require('./inbox-consent-confirmation-20261026').run(inbox).catch(error=>console.error('Phone consent correction failed:',error.code||error.status||'error'));
 require('./inbox-consent-range-20261026').run(inbox).catch(error=>console.error('Phone consent range failed:',error.code||error.status||'error'));
 async function replyAura(req, res, text) {

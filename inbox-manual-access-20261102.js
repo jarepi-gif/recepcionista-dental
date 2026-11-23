@@ -5,6 +5,7 @@ const START='2026-10-31T00:00:00-06:00',END='2026-11-03T00:00:00-06:00';
 const AUDIT='thera-manual-access-batch-'+ID;
 const DEFAULT_BATCH={id:ID,start:START,end:END};
 const NOVEMBER_7_BATCH={id:'owner-manual-template-access-20261109-from-07',start:'2026-11-07T00:00:00-06:00',end:'2026-11-10T00:00:00-06:00'};
+const NOVEMBER_20_BATCH={id:'owner-manual-template-access-20261123-from-20',start:'2026-11-20T00:00:00-06:00',end:'2026-11-23T00:00:00-06:00'};
 const inRange=(d,{start,end}=DEFAULT_BATCH)=>Date.parse(d.lastInbound)>=Date.parse(start)&&Date.parse(d.lastInbound)<Date.parse(end);
 const excluded=d=>{const c=d.commercial||{};return c.doNotContact||c.followUp?.status==='declined'||['test','supplier','duplicate'].includes(c.classification);};
 const key=phone=>'thera-inbox-'+crypto.createHash('sha256').update(phone).digest('hex').slice(0,32);
@@ -43,5 +44,5 @@ async function apply(store,now=new Date(),batch=DEFAULT_BATCH){
  return summary;
 }
 async function run(inbox,log=console.log,batch=DEFAULT_BATCH){if(inbox.enabled)log('Manual template access '+JSON.stringify({id:batch.id,...await apply(inbox.store,new Date(),batch)}));}
-module.exports={ID,START,END,AUDIT,NOVEMBER_7_BATCH,inRange,excluded,apply,run};
+module.exports={ID,START,END,AUDIT,NOVEMBER_7_BATCH,NOVEMBER_20_BATCH,inRange,excluded,apply,run};
 
