@@ -27,7 +27,7 @@ for(const [batch,older,last] of [[undefined,'2026-10-30T23:59:59-06:00','2026-11
  const before=writes;delete one.commercial.manualTemplateAccess;records.get(key('one')).data=one;
  const again=await apply(store,new Date(),batch);assert.equal(again.previouslyCompleted,true);assert.equal(writes,before);assert.equal(records.get(key('one')).data.commercial.manualTemplateAccess,undefined);assert.equal(records.get(audit).data.targets.length,3);assert.equal(records.get(key('later')).data.mode,'aura');
 });
-for(const scope of [{commercial:structuredClone(access)},{lastInbound:'2026-11-14T12:00:00-06:00',commercial:{}}])test('server records permission only for explicit approved request: '+(scope.lastInbound||'prior access'),async()=>{
+for(const scope of [{commercial:structuredClone(access)},{lastInbound:'2026-11-14T12:00:00-06:00',commercial:{}},{lastInbound:'2026-11-21T12:00:00-06:00',commercial:{}}])test('server records permission only for explicit approved request: '+(scope.lastInbound||'prior access'),async()=>{
  let row={phone:'+525500000001',mode:'human',lastInboundSid:'SM1',...scope},sends=0,updates=0;
  const client=templateClient();client.messages={create:async()=>{sends++;return {sid:'SMsent',status:'queued'};}};
  const claims=new Map();const documents=k=>({update:async({data})=>claims.set(k,data)});documents.create=async({uniqueName,data})=>{if(claims.has(uniqueName))throw {status:409};claims.set(uniqueName,data);};
@@ -45,7 +45,7 @@ test('unapproved provider state never records a manual permission confirmation',
  const res={status(n){this.code=n;return this;},json(){}};
  await handler({body:{phone:'test',requestId:'a'.repeat(32),consentConfirmed:true}},res);assert.equal(res.code,409);assert.equal(writes,0);assert.equal(sends,0);
 });
-for(const scope of [{commercial:access},{lastInbound:'2026-11-14T12:00:00-06:00',commercial:{}}])test('manual access UI requires confirmation: '+(scope.lastInbound||'prior access'),async()=>{
+for(const scope of [{commercial:access},{lastInbound:'2026-11-14T12:00:00-06:00',commercial:{}},{lastInbound:'2026-11-21T12:00:00-06:00',commercial:{}}])test('manual access UI requires confirmation: '+(scope.lastInbound||'prior access'),async()=>{
  const vm=require('node:vm'),fs=require('node:fs');const source=fs.readFileSync(require.resolve('../inbox-public/app.js'),'utf8');
  const code=source.slice(source.indexOf('let humanTemplate='),source.indexOf("$('attention-filter').onchange"));
  const elements=new Map(),$=id=>{if(!elements.has(id))elements.set(id,{disabled:false,hidden:false,textContent:''});return elements.get(id);};
