@@ -67,7 +67,8 @@ function createRecovery({client,store,from,env,push,locked}){
   await docs(claim).update({data:{state:result.status,sid:result.sid||null}});
   await push.send({title:'Seguimiento de Thera pendiente',body:'Hay un caso asignado que requiere atención en la bandeja.',eventId:claim,url:new URL(env.INBOX_PUBLIC_URL).origin+'/bandeja'});
  }
- async function tick(now=new Date()){
+ async function tick(now=new Date()){return require('./sync-usage').runProcess('recovery.tick',()=>tickWork(now));}
+ async function tickWork(now){
   if(running)return;running=true;
   try{
    const s=await settings();if(!s.enabled)return;const template=await templateStatus(s);
@@ -76,10 +77,12 @@ function createRecovery({client,store,from,env,push,locked}){
     // An agreed follow-up is durable, and is never silently rescheduled or repeated.
     if(c.followUp?.status==='agreed'&&(!row.recovery||(['queued','responded'].includes(row.recovery.status)&&row.recovery.followUpDueAt!==c.followUp.dueAt))){await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'queued',sid:null,sentAt:null,deliveryStatus:null,dueAt:c.followUp.dueAt,followUpDueAt:c.followUp.dueAt,enrolledAt:now.toISOString(),baselineInboundSid:d.lastInboundSid,origin:'agreed',attempts:0}}));}
     await locked(row.phone,async()=>{
-     let data=(await store.ensure(row.phone)).data,r=data.recovery;
+     const snapshot={document:await store.ensure(row.phone)};
+     const mutate=fn=>store.mutate(row.phone,fn,snapshot);
+     let data=snapshot.document.data,r=data.recovery;
      const appointment=data.commercial?.appointment;
      if(!data.commercial?.doNotContact&&appointment?.status==='confirmed'&&Date.parse(appointment.at)>+now&&appointment.confirmedBy&&appointment.evidence&&data.confirmationNotice?.appointmentAt!==appointment.at&&businessHours(now)){
-      if(!data.lastInbound||+now-Date.parse(data.lastInbound)>=24*3600000-60000){await store.mutate(row.phone,d=>({...d,confirmationNotice:{status:'needs_template',appointmentAt:null,pendingAppointmentAt:appointment.at}}));}
+      if(!data.lastInbound||+now-Date.parse(data.lastInbound)>=24*3600000-60000){await mutate(d=>({...d,confirmationNotice:{status:'needs_template',appointmentAt:null,pendingAppointmentAt:appointment.at}}));}
       else{
        const claim='thera-appointment-notice-'+crypto.createHash('sha256').update(canonical(row.phone)+'|'+appointment.at).digest('hex');
        try{
@@ -89,43 +92,52 @@ function createRecovery({client,store,from,env,push,locked}){
         const body=`Tu cita en Thera Dental Clinic está confirmada para el ${when}. El ${appointment.confirmedBy} registró la confirmación en agenda. Te esperamos en Plaza Centtral Interlomas, planta baja, local 11. Si necesitas cambiarla, escríbenos por este chat.`;
         const m=await client.messages.create({from,to:row.phone,body});
         await docs(claim).update({data:{state:m.status,sid:m.sid}});
-        await store.mutate(row.phone,d=>({...d,confirmationNotice:{status:m.status,sid:m.sid,appointmentAt:appointment.at}}));
-       }catch(e){await store.mutate(row.phone,d=>({...d,confirmationNotice:{status:'uncertain',appointmentAt:appointment.at,errorCode:e.code||null}}));}
+        await mutate(d=>({...d,confirmationNotice:{status:m.status,sid:m.sid,appointmentAt:appointment.at}}));
+       }catch(e){await mutate(d=>({...d,confirmationNotice:{status:'uncertain',appointmentAt:appointment.at,errorCode:e.code||null}}));}
       }
      }
      if(data.commercial?.classification==='prospect'&&!data.commercial?.doNotContact&&data.commercial?.handoff?.status==='pending'&&Date.parse(data.commercial.handoff.dueAt)<=+now&&businessHours(now))await notifyOwner(data,'handoff-'+canonical(data.phone)+'-'+data.commercial.handoff.requestedAt);
      if(!r)return;
      if(r.sid&&r.responseForSid!==r.sid&&data.lastInboundSid!==r.baselineInboundSid&&Date.parse(data.lastInbound)>Date.parse(r.sentAt)){
-      data=await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'responded',respondedAt:d.recovery.respondedAt||d.lastInbound,latestResponseAt:d.lastInbound,responseForSid:r.sid,responseSid:d.lastInboundSid}}));
+      data=await mutate(d=>({...d,recovery:{...d.recovery,status:'responded',respondedAt:d.recovery.respondedAt||d.lastInbound,latestResponseAt:d.lastInbound,responseForSid:r.sid,responseSid:d.lastInboundSid}}));
       r=data.recovery; // The inbound webhook already sends the doctor's existing alert.
      }
      if(r.sid&&!['read','failed','undelivered'].includes(r.deliveryStatus)){
-      const m=await client.messages(r.sid).fetch();data=await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,deliveryStatus:m.status,deliveredEver:d.recovery.deliveredEver||['delivered','read'].includes(m.status),errorCode:m.errorCode||null,price:m.price||null,priceUnit:m.priceUnit||null}}));r=data.recovery;
+      const m=await client.messages(r.sid).fetch();data=await mutate(d=>({...d,recovery:{...d.recovery,deliveryStatus:m.status,deliveredEver:d.recovery.deliveredEver||['delivered','read'].includes(m.status),errorCode:m.errorCode||null,price:m.price||null,priceUnit:m.priceUnit||null}}));r=data.recovery;
      }
      const action=decision(data,now,s,template);
-     if(['excluded','confirmed','human'].includes(action)){await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:action}}));return;}
+     if(['excluded','confirmed','human'].includes(action)){await mutate(d=>({...d,recovery:{...d.recovery,status:action}}));return;}
      if(['needs_consent','needs_template'].includes(action)){
-      if(r.blockedReason!==action)await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,blockedReason:action}}));return;
+      if(r.blockedReason!==action)await mutate(d=>({...d,recovery:{...d.recovery,blockedReason:action}}));return;
      }
      if(!['session','template'].includes(action))return;
      const claim='thera-recovery-send-'+crypto.createHash('sha256').update(canonical(row.phone)+'|'+(r.origin==='agreed'?r.dueAt:'initial')).digest('hex');
-     try{await docs.create({uniqueName:claim,data:{state:'pending',phone:row.phone}});}catch(e){if(e.status!==409)throw e;await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'uncertain',blockedReason:'Envío ya reclamado; revisar antes de reenviar'}}));return;}
-     const current=(await store.ensure(row.phone)).data;
-     if(current.lastInboundSid!==data.lastInboundSid||!['session','template'].includes(decision(current,now,s,template))){await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'cancelled',blockedReason:'El caso cambió antes del envío; continuar con su nueva solicitud'}}));return;}
-     await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'sending'}}));
+     try{await docs.create({uniqueName:claim,data:{state:'pending',phone:row.phone}});}catch(e){if(e.status!==409)throw e;await mutate(d=>({...d,recovery:{...d.recovery,status:'uncertain',blockedReason:'Envío ya reclamado; revisar antes de reenviar'}}));return;}
+     snapshot.document=await store.ensure(row.phone);
+     const current=snapshot.document.data;
+     if(current.lastInboundSid!==data.lastInboundSid||!['session','template'].includes(decision(current,now,s,template))){await mutate(d=>({...d,recovery:{...d.recovery,status:'cancelled',blockedReason:'El caso cambió antes del envío; continuar con su nueva solicitud'}}));return;}
+     try{await mutate(d=>{
+      // A CAS retry may observe a takeover or new inbound after the final read.
+      // Do not turn that newer state into a patient send.
+      if(d.lastInboundSid!==data.lastInboundSid||!['session','template'].includes(decision(d,now,s,template))){const error=new Error('El caso cambió antes del envío');error.code='RECOVERY_STATE_CHANGED';throw error;}
+      return {...d,recovery:{...d.recovery,status:'sending'}};
+     });}catch(error){
+      if(error.code!=='RECOVERY_STATE_CHANGED')throw error;
+      await mutate(d=>({...d,recovery:{...d.recovery,status:'cancelled',blockedReason:'El caso cambió antes del envío; continuar con su nueva solicitud'}}));return;
+     }
      try{const message=await client.messages.create({from,to:row.phone,...(action==='template'?{contentSid:template.sid}:{body:BODY})});
       await docs(claim).update({data:{state:message.status,sid:message.sid,phone:row.phone}});
-      await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'sent',sid:message.sid,firstSid:d.recovery.firstSid||message.sid,sentAt:new Date().toISOString(),baselineInboundSid:data.lastInboundSid,deliveryStatus:message.status,blockedReason:null,attempts:1},preview:BODY.slice(0,160)}));
-     }catch(e){await store.mutate(row.phone,d=>({...d,recovery:{...d.recovery,status:'uncertain',blockedReason:'Twilio no confirmó el envío; no se reintenta automáticamente',errorCode:e.code||null}}));}
+      await mutate(d=>({...d,recovery:{...d.recovery,status:'sent',sid:message.sid,firstSid:d.recovery.firstSid||message.sid,sentAt:new Date().toISOString(),baselineInboundSid:data.lastInboundSid,deliveryStatus:message.status,blockedReason:null,attempts:1},preview:BODY.slice(0,160)}));
+     }catch(e){await mutate(d=>({...d,recovery:{...d.recovery,status:'uncertain',blockedReason:'Twilio no confirmó el envío; no se reintenta automáticamente',errorCode:e.code||null}}));}
     });
    }
    if(+now-lastReport>=3600000){const report=summarize(await store.list(),now);console.log('AURA_RECOVERY_REPORT '+JSON.stringify(report));lastReport=+now;}
   }catch(e){console.error('Aura recovery:',e.code||e.status||'error');}finally{running=false;}
  }
- async function onInbound(phone){const s=await settings();if(!s.enabled)return;const data=(await store.ensure(phone)).data,c=data.commercial;
-  if(data.recovery?.status==='queued'&&['automatic','historical_review'].includes(data.recovery.origin)){await store.mutate(phone,d=>({...d,recovery:{...d.recovery,dueAt:workflow.nextServiceDeadline(new Date(Date.parse(d.lastInbound)+4*3600000),0),baselineInboundSid:d.lastInboundSid}}));return;}
+ async function onInbound(phone){const s=await settings();if(!s.enabled)return;const snapshot={document:await store.ensure(phone)},data=snapshot.document.data,c=data.commercial;
+  if(data.recovery?.status==='queued'&&['automatic','historical_review'].includes(data.recovery.origin)){await store.mutate(phone,d=>({...d,recovery:{...d.recovery,dueAt:workflow.nextServiceDeadline(new Date(Date.parse(d.lastInbound)+4*3600000),0),baselineInboundSid:d.lastInboundSid}}),snapshot);return;}
   if(data.recovery||!c||c.classification!=='prospect'||c.doNotContact||c.canAttend==='no'||c.appointment?.status==='confirmed'||data.mode==='human')return;
-  await store.mutate(phone,d=>({...d,recovery:{status:'queued',dueAt:workflow.nextServiceDeadline(new Date(Date.parse(d.lastInbound)+4*3600000),0),enrolledAt:new Date().toISOString(),baselineInboundSid:d.lastInboundSid,origin:'automatic',attempts:0}}));
+  await store.mutate(phone,d=>({...d,recovery:{status:'queued',dueAt:workflow.nextServiceDeadline(new Date(Date.parse(d.lastInbound)+4*3600000),0),enrolledAt:new Date().toISOString(),baselineInboundSid:d.lastInboundSid,origin:'automatic',attempts:0}}),snapshot);
  }
  const interval=setInterval(()=>tick(),60000);interval.unref();
  return {settings,templateStatus,configure,enroll,enrollRecent,tick,onInbound,report:async()=>summarize(await store.list()),stop:()=>clearInterval(interval),BODY};
