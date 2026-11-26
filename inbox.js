@@ -25,11 +25,12 @@ class InboxStore {
       catch(createError) { if(createError.status===409) return this.documents(key(phone)).fetch(); throw createError; }
     }
   }
-  async mutate(phone, fn) {
+  async mutate(phone, fn, snapshot=null) {
     phone=phoneNumber(phone);
     for(let attempt=0;attempt<5;attempt++) {
-      const doc=await this.ensure(phone);
-      try { return (await this.documents(key(phone)).update({ifMatch:doc.revision,data:fn({...doc.data})})).data; }
+      const candidate=attempt===0?snapshot?.document:null;
+      const doc=candidate?.uniqueName===key(phone)&&candidate.revision?candidate:await this.ensure(phone);
+      try { const updated=await this.documents(key(phone)).update({ifMatch:doc.revision,data:fn({...doc.data})});if(snapshot)snapshot.document=updated;return updated.data; }
       catch(e) { if(e.status!==412) throw e; }
     }
     throw new Error('La conversación cambió; vuelve a intentar');
@@ -48,6 +49,8 @@ function installInbox(app, env=process.env, clientOverride=null) {
   if(!env.INBOX_SECRET || env.INBOX_SECRET.length<32 || !env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.INBOX_PUBLIC_URL) throw new Error('Configuración incompleta de bandeja');
   const origin=new URL(env.INBOX_PUBLIC_URL).origin;
   const client=clientOverride||twilio(env.TWILIO_ACCOUNT_SID,env.TWILIO_AUTH_TOKEN);
+  const usage=require('./sync-usage').installUsage(client);
+  app.use(require('./sync-usage').middleware);
   const from=phoneNumber(env.TWILIO_WHATSAPP_NUMBER);
   const store=new InboxStore(client);
   const attention=require('./inbox-attention').createAttention({client,store,from});
@@ -202,7 +205,7 @@ function installInbox(app, env=process.env, clientOverride=null) {
     });
   }));
   return {
-    enabled:true,store,alertInbound,notifyInbound:push.notifyInbound,recovery,
+    enabled:true,store,alertInbound,notifyInbound:push.notifyInbound,recovery,usage,
     async context(phone, currentSid) {
       const rows=await Promise.all([client.messages.list({from:phone,to:from,limit:14}),client.messages.list({from,to:phone,limit:14})]);
       const history=cleanNameHistory(rows.flat().filter(m=>m.sid!==currentSid && m.body && !['failed','undelivered'].includes(m.status)).sort((a,b)=>a.dateCreated-b.dateCreated).slice(-14).map(m=>({role:m.from===phone?'user':'assistant',content:m.body})));
